@@ -8,8 +8,24 @@ export default function App() {
   const [gameState, setGameState] = useState('menu'); // 'menu' | 'playing' | 'gameover' | 'win' | 'hosting' | 'scanning' | 'found_survivor'
   const [inventory, setInventory] = useState({ Wood: 0, Stone: 0, Radio: 0 });
   const [health, setHealth] = useState(100);
+  const [gameKey, setGameKey] = useState(0);
+  const [tutorialState, setTutorialState] = useState('visible');
+  const [day, setDay] = useState(1);
+  const [dayFlash, setDayFlash] = useState(false);
   const isTouch = navigator.maxTouchPoints > 0;
   const isMobile = window.innerWidth < 768;
+
+  useEffect(() => {
+    if (gameState === 'playing' && tutorialState === 'visible') {
+      const fadeTimer = setTimeout(() => {
+        setTutorialState('fading');
+      }, 5000);
+      const hideTimer = setTimeout(() => {
+        setTutorialState('hidden');
+      }, 6000);
+      return () => { clearTimeout(fadeTimer); clearTimeout(hideTimer); };
+    }
+  }, [gameState, tutorialState]);
 
   useEffect(() => {
     if (gameState !== 'playing') return;
@@ -27,10 +43,17 @@ export default function App() {
       });
     };
 
+    const handleNewDay = (newDayCount) => {
+      setDay(newDayCount);
+      setDayFlash(true);
+      setTimeout(() => setDayFlash(false), 2000);
+    };
+
     const checkGame = setInterval(() => {
       if (gameRef.current) {
         gameRef.current.events.on('itemGathered', handleGather);
         gameRef.current.events.on('takeDamage', handleDamage);
+        gameRef.current.events.on('newDay', handleNewDay);
         clearInterval(checkGame);
       }
     }, 100);
@@ -40,6 +63,7 @@ export default function App() {
       if (gameRef.current) {
         gameRef.current.events.off('itemGathered', handleGather);
         gameRef.current.events.off('takeDamage', handleDamage);
+        gameRef.current.events.off('newDay', handleNewDay);
       }
     };
   }, [gameState]);
@@ -181,6 +205,8 @@ export default function App() {
           onClick={() => {
             setHealth(100);
             setInventory({ Wood: 0, Stone: 0, Radio: 0 });
+            setGameKey(k => k + 1);
+            setDay(1);
             setGameState('playing');
           }}
           style={{ fontSize: '24px', background: '#000', color: '#fff', border: '4px solid #fff' }}
@@ -201,6 +227,8 @@ export default function App() {
           onClick={() => {
             setHealth(100);
             setInventory({ Wood: 0, Stone: 0, Radio: 0 });
+            setGameKey(k => k + 1);
+            setDay(1);
             setGameState('playing');
           }}
           style={{ fontSize: '24px', background: '#2ecc71', color: '#fff', border: '4px solid #fff' }}
@@ -215,26 +243,73 @@ export default function App() {
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
-      {/* HUD Overlay */}
-      <div className="retro-box" style={{ position: 'absolute', top: isMobile ? '5px' : '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', gap: isMobile ? '10px' : '20px', fontSize: isMobile ? '14px' : '20px' }}>
-        <span key={health} className={health < 100 ? "health-flash" : ""} style={{ display: 'inline-block' }}>
-          <img src="/icon_heart.png" style={{ width: '24px', height: '24px', verticalAlign: 'middle', marginRight: '8px' }} alt="Health" />
-          {health}
-        </span>
-        <span>
-          <img src="/icon_wood.png" style={{ width: '24px', height: '24px', verticalAlign: 'middle', marginRight: '8px' }} alt="Wood" />
-          {inventory.Wood}
-        </span>
-        <span>
-          <img src="/icon_stone.png" style={{ width: '24px', height: '24px', verticalAlign: 'middle', marginRight: '8px' }} alt="Stone" />
-          {inventory.Stone}
-        </span>
-        <span>
-          📻 {inventory.Radio}/3
-        </span>
+      <div style={{ position: 'absolute', top: 10, left: 0, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', zIndex: 20 }}>
+        {/* Visual Health Bar */}
+        <div style={{ width: '300px', height: '24px', background: '#000', border: '4px solid #fff', position: 'relative' }}>
+           <div style={{ width: `${health}%`, height: '100%', background: '#e74c3c', transition: 'width 0.3s' }} />
+        </div>
+
+        {/* Hotbar Slots */}
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <div className="retro-box" style={{ width: '60px', height: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <img src="/icon_wood.png" width="24" alt="Wood" />
+            <span>{inventory.Wood}</span>
+          </div>
+          <div className="retro-box" style={{ width: '60px', height: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <img src="/icon_stone.png" width="24" alt="Stone" />
+            <span>{inventory.Stone}</span>
+          </div>
+          <div className="retro-box" style={{ width: '60px', height: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <img src="/radio_part.png" width="24" alt="Radio" />
+            <span>{inventory.Radio}/3</span>
+          </div>
+          <div className="retro-box" 
+               onClick={handleCraftCampfire}
+               style={{ width: '60px', height: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: canCraft ? '#e67e22' : '#333', cursor: canCraft ? 'pointer' : 'not-allowed' }}>
+            🔥<span style={{ fontSize: '10px' }}>CRAFT</span>
+          </div>
+        </div>
       </div>
       
-      <PhaserGame gameRef={gameRef} />
+      {health < 30 && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 15, pointerEvents: 'none', animation: 'pulseRed 0.5s infinite alternate' }}></div>
+      )}
+      
+      <style>{`
+        @keyframes pulseRed {
+          from { box-shadow: inset 0 0 0px 0px rgba(255,0,0,0); }
+          to { box-shadow: inset 0 0 50px 20px rgba(255,0,0,0.8); }
+        }
+        .day-flash {
+          color: #fada5e !important;
+          border-color: #fada5e !important;
+          box-shadow: 0 0 20px #fada5e, inset 0 0 20px #fada5e !important;
+        }
+      `}</style>
+
+      {/* Day Counter */}
+      <div className={`retro-box ${dayFlash ? 'day-flash' : ''}`} style={{
+        position: 'absolute', top: isMobile ? '5px' : '20px', right: isMobile ? '5px' : '20px', zIndex: 20,
+        fontSize: isMobile ? '16px' : '24px', transition: 'all 0.3s'
+      }}>
+        DAY {day}
+      </div>
+
+      {tutorialState !== 'hidden' && (
+        <div className="retro-box" style={{ 
+          position: 'absolute', top: '40%', left: '50%', transform: 'translate(-50%, -50%)', 
+          zIndex: 30, textAlign: 'center', pointerEvents: 'none',
+          opacity: tutorialState === 'fading' ? 0 : 1,
+          transition: 'opacity 1s ease-in-out',
+          fontSize: isMobile ? '12px' : '20px'
+        }}>
+          WASD to move | SPACE to gather<br/><br/>
+          Build campfires to survive the night<br/><br/>
+          Find 3 Radio Parts to escape
+        </div>
+      )}
+      
+      <PhaserGame key={gameKey} gameRef={gameRef} />
       
       {isTouch && <MobileControls onMove={handleJoystickMove} onStop={handleJoystickStop} onChop={handleChop} />}
       {!isTouch && (
@@ -244,18 +319,6 @@ export default function App() {
           style={{ position: 'absolute', bottom: 50, right: 50, zIndex: 10, fontSize: '20px', background: '#000', border: '4px solid #fff' }}
         >
           GATHER (SPACE)
-        </button>
-      )}
-      
-      {canCraft && (
-        <button 
-          className="retro-button"
-          onClick={handleCraftCampfire}
-          style={{ position: 'absolute', top: isMobile ? '60px' : '100px', right: '10px', zIndex: 10, fontSize: isMobile ? '14px' : '18px', background: '#e67e22' }}
-        >
-          🔥 CRAFT CAMPFIRE<br/>
-          (2 <img src="/icon_wood.png" style={{ width: '16px', height: '16px', verticalAlign: 'middle' }} alt="Wood" />, 
-           1 <img src="/icon_stone.png" style={{ width: '16px', height: '16px', verticalAlign: 'middle' }} alt="Stone" />)
         </button>
       )}
     </div>
