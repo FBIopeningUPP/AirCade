@@ -16,6 +16,10 @@ export default class GameScene extends Phaser.Scene {
   }
 
   create() {
+    this.inventory = { Wood: 0, Stone: 0, Radio: 0 };
+    this.health = 100;
+    this.isDead = false;
+
     const graphics = this.add.graphics();
     graphics.fillStyle(0xffffff, 1);
     graphics.fillCircle(4, 4, 4);
@@ -81,6 +85,7 @@ export default class GameScene extends Phaser.Scene {
     this.physics.add.collider(this.player, this.campfires);
 
     this.wasd = this.input.keyboard.addKeys('W,S,A,D');
+    this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
     this.game.events.on('joystickMove', (data) => {
       this.joystickData = data;
@@ -92,69 +97,78 @@ export default class GameScene extends Phaser.Scene {
     this.game.events.on('chopAction', () => {
       let gathered = false;
       
-      for (const tree of this.trees.getChildren()) {
-        if (tree.active) {
-          const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, tree.x, tree.y);
-          if (dist < 80) {
-            tree.destroy();
-            this.game.events.emit('itemGathered', 'Wood');
-            this.spawnFloatingText('+1 Wood', '#2ecc71');
-            gathered = true;
-            break;
-          }
+      this.physics.overlap(this.player, this.trees, (player, tree) => {
+        if (!gathered) {
+          tree.destroy();
+          this.inventory.Wood++;
+          this.emitHUDUpdate();
+          this.spawnFloatingText('+1 Wood', '#2ecc71');
+          gathered = true;
         }
-      }
+      });
 
       if (gathered) return;
 
-      for (const rock of this.rocks.getChildren()) {
-        if (rock.active) {
-          const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, rock.x, rock.y);
-          if (dist < 80) {
-            rock.destroy();
-            this.game.events.emit('itemGathered', 'Stone');
-            this.spawnFloatingText('+1 Stone', '#95a5a6');
-            gathered = true;
-            break;
-          }
+      this.physics.overlap(this.player, this.rocks, (player, rock) => {
+        if (!gathered) {
+          rock.destroy();
+          this.inventory.Stone++;
+          this.emitHUDUpdate();
+          this.spawnFloatingText('+1 Stone', '#95a5a6');
+          gathered = true;
         }
-      }
+      });
 
       if (gathered) return;
 
-      for (const radio of this.radios.getChildren()) {
-        if (radio.active) {
-          const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, radio.x, radio.y);
-          if (dist < 80) {
-            radio.destroy();
-            this.game.events.emit('itemGathered', 'Radio');
-            this.spawnFloatingText('+1 Radio', '#3498db');
-            break;
+      this.physics.overlap(this.player, this.radios, (player, radio) => {
+        if (!gathered) {
+          radio.destroy();
+          this.inventory.Radio++;
+          this.emitHUDUpdate();
+          this.spawnFloatingText('+1 Radio', '#3498db');
+          gathered = true;
+          if (this.inventory.Radio >= 3) {
+            this.isDead = true;
+            this.game.events.emit('gameWon');
           }
         }
+      });
+    });
+
+    this.game.events.on('requestCraft', () => {
+      if (this.inventory.Wood >= 2 && this.inventory.Stone >= 1) {
+        this.inventory.Wood -= 2;
+        this.inventory.Stone -= 1;
+        this.emitHUDUpdate();
+        
+        const fire = this.campfires.create(this.player.x, this.player.y, 'campfire')
+          .setDisplaySize(48, 48)
+          .setBlendMode(Phaser.BlendModes.MULTIPLY);
+        fire.refreshBody();
+
+        this.add.particles(fire.x, fire.y, 'smoke', {
+          speed: { min: 20, max: 40 },
+          angle: { min: 250, max: 290 },
+          scale: { start: 1, end: 3 },
+          alpha: { start: 0.5, end: 0 },
+          lifespan: 2000,
+          frequency: 200,
+          blendMode: 'ADD'
+        }).setDepth(50);
       }
     });
 
-    this.game.events.on('craftCampfire', () => {
-      const fire = this.campfires.create(this.player.x, this.player.y, 'campfire')
-        .setDisplaySize(48, 48)
-        .setBlendMode(Phaser.BlendModes.MULTIPLY);
-      fire.refreshBody();
-
-      this.add.particles(fire.x, fire.y, 'smoke', {
-        speed: { min: 20, max: 40 },
-        angle: { min: 250, max: 290 },
-        scale: { start: 1, end: 3 },
-        alpha: { start: 0.5, end: 0 },
-        lifespan: 2000,
-        frequency: 200,
-        blendMode: 'ADD'
-      }).setDepth(50);
+    this.game.events.on('restartGame', () => {
+      this.scene.restart();
     });
 
     this.scale.on('resize', () => {
       const zoom = Math.max(this.scale.width, this.scale.height) / 1200;
       this.cameras.main.setZoom(zoom);
+      if (this.darknessLayer) {
+        this.darknessLayer.resize(this.scale.width, this.scale.height);
+      }
     });
     const zoom = Math.max(this.scale.width, this.scale.height) / 1200;
     this.cameras.main.setZoom(zoom);
@@ -174,7 +188,7 @@ export default class GameScene extends Phaser.Scene {
     this.darknessAlpha = 0;
     this.darknessDirection = 1;
     this.dayCount = 1;
-    this.darknessLayer = this.add.renderTexture(0, 0, 4000, 4000).setDepth(100).setAlpha(0);
+    this.darknessLayer = this.add.renderTexture(0, 0, this.scale.width, this.scale.height).setDepth(100).setAlpha(0).setScrollFactor(0);
 
     this.time.addEvent({ delay: 3000, loop: true, callback: () => {
       if (this.darknessAlpha > 0.5) {
@@ -182,13 +196,28 @@ export default class GameScene extends Phaser.Scene {
         for (const fire of this.campfires.getChildren()) {
           if (Phaser.Math.Distance.Between(this.player.x, this.player.y, fire.x, fire.y) < 150) isWarm = true;
         }
-        if (!isWarm) {
-          this.game.events.emit('takeDamage');
+        if (!isWarm && !this.isDead) {
+          this.health = Math.max(0, this.health - 5);
+          this.emitHUDUpdate();
           this.cameras.main.shake(200, 0.01);
           this.spawnFloatingText('-5 HP', '#e74c3c');
+          if (this.health <= 0) {
+            this.isDead = true;
+            this.game.events.emit('gameOver');
+          }
         }
       }
     } });
+
+    // Initial HUD update
+    this.time.delayedCall(100, () => this.emitHUDUpdate());
+  }
+
+  emitHUDUpdate() {
+    this.game.events.emit('updateHUD', {
+      health: this.health,
+      inventory: this.inventory
+    });
   }
 
   spawnFloatingText(text, color) {
@@ -209,8 +238,18 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  update() {
-    this.darknessAlpha += 0.0001 * this.darknessDirection;
+  update(time, delta) {
+    if (this.isDead) {
+      this.player.body.setVelocity(0);
+      this.dustEmitter.emitting = false;
+      return;
+    }
+
+    if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+      this.game.events.emit('chopAction');
+    }
+
+    this.darknessAlpha += (0.0001 / 16) * delta * this.darknessDirection;
     if (this.darknessAlpha >= 0.85) {
       this.darknessAlpha = 0.85;
       this.darknessDirection = -1;
@@ -226,9 +265,13 @@ export default class GameScene extends Phaser.Scene {
 
     this.darknessLayer.clear();
     this.darknessLayer.draw('blackBg', 0, 0);
-    this.darknessLayer.erase('lightHole', this.player.x - 150, this.player.y - 150);
+
+    const scrollX = this.cameras.main.scrollX;
+    const scrollY = this.cameras.main.scrollY;
+
+    this.darknessLayer.erase('lightHole', this.player.x - scrollX - 150, this.player.y - scrollY - 150);
     for (const fire of this.campfires.getChildren()) {
-      this.darknessLayer.erase('lightHole', fire.x - 150, fire.y - 150);
+      this.darknessLayer.erase('lightHole', fire.x - scrollX - 150, fire.y - scrollY - 150);
     }
 
     this.player.body.setVelocity(0);

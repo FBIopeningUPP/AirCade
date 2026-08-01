@@ -6,9 +6,7 @@ import './index.css';
 export default function App() {
   const gameRef = useRef(null);
   const [gameState, setGameState] = useState('menu'); // 'menu' | 'playing' | 'gameover' | 'win' | 'hosting' | 'scanning' | 'found_survivor'
-  const [inventory, setInventory] = useState({ Wood: 0, Stone: 0, Radio: 0 });
-  const [health, setHealth] = useState(100);
-  const [gameKey, setGameKey] = useState(0);
+  const [hudState, setHudState] = useState({ health: 100, inventory: { Wood: 0, Stone: 0, Radio: 0 } });
   const [tutorialState, setTutorialState] = useState('visible');
   const [day, setDay] = useState(1);
   const [dayFlash, setDayFlash] = useState(false);
@@ -30,17 +28,16 @@ export default function App() {
   useEffect(() => {
     if (gameState !== 'playing') return;
 
-    const handleGather = (item) => {
-      setInventory(prev => ({ ...prev, [item]: prev[item] + 1 }));
+    const handleUpdateHUD = (data) => {
+      setHudState(data);
     };
-    
-    const handleDamage = () => {
-      setHealth(h => {
-        if (h - 5 <= 0) {
-          setGameState('gameover');
-        }
-        return Math.max(0, h - 5);
-      });
+
+    const handleGameOver = () => {
+      setGameState('gameover');
+    };
+
+    const handleGameWon = () => {
+      setGameState('win');
     };
 
     const handleNewDay = (newDayCount) => {
@@ -51,8 +48,9 @@ export default function App() {
 
     const checkGame = setInterval(() => {
       if (gameRef.current) {
-        gameRef.current.events.on('itemGathered', handleGather);
-        gameRef.current.events.on('takeDamage', handleDamage);
+        gameRef.current.events.on('updateHUD', handleUpdateHUD);
+        gameRef.current.events.on('gameOver', handleGameOver);
+        gameRef.current.events.on('gameWon', handleGameWon);
         gameRef.current.events.on('newDay', handleNewDay);
         clearInterval(checkGame);
       }
@@ -61,26 +59,12 @@ export default function App() {
     return () => {
       clearInterval(checkGame);
       if (gameRef.current) {
-        gameRef.current.events.off('itemGathered', handleGather);
-        gameRef.current.events.off('takeDamage', handleDamage);
+        gameRef.current.events.off('updateHUD', handleUpdateHUD);
+        gameRef.current.events.off('gameOver', handleGameOver);
+        gameRef.current.events.off('gameWon', handleGameWon);
         gameRef.current.events.off('newDay', handleNewDay);
       }
     };
-  }, [gameState]);
-
-  useEffect(() => {
-    if (inventory.Radio >= 3) {
-      setGameState('win');
-    }
-  }, [inventory.Radio]);
-
-  useEffect(() => {
-    if (gameState === 'scanning') {
-      const timer = setTimeout(() => {
-        setGameState('found_survivor');
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
   }, [gameState]);
 
   const handleJoystickMove = (e) => {
@@ -96,15 +80,8 @@ export default function App() {
   };
 
   const handleCraftCampfire = () => {
-    if (inventory.Wood >= 2 && inventory.Stone >= 1) {
-      setInventory(prev => ({
-        ...prev,
-        Wood: prev.Wood - 2,
-        Stone: prev.Stone - 1
-      }));
-      if (gameRef.current) {
-        gameRef.current.events.emit('craftCampfire');
-      }
+    if (gameRef.current) {
+      gameRef.current.events.emit('requestCraft');
     }
   };
 
@@ -203,9 +180,7 @@ export default function App() {
         <button 
           className="retro-button"
           onClick={() => {
-            setHealth(100);
-            setInventory({ Wood: 0, Stone: 0, Radio: 0 });
-            setGameKey(k => k + 1);
+            if (gameRef.current) gameRef.current.events.emit('restartGame');
             setDay(1);
             setGameState('playing');
           }}
@@ -225,9 +200,7 @@ export default function App() {
         <button 
           className="retro-button"
           onClick={() => {
-            setHealth(100);
-            setInventory({ Wood: 0, Stone: 0, Radio: 0 });
-            setGameKey(k => k + 1);
+            if (gameRef.current) gameRef.current.events.emit('restartGame');
             setDay(1);
             setGameState('playing');
           }}
@@ -239,6 +212,7 @@ export default function App() {
     );
   }
 
+  const { health, inventory } = hudState;
   const canCraft = inventory.Wood >= 2 && inventory.Stone >= 1;
 
   return (
@@ -309,7 +283,7 @@ export default function App() {
         </div>
       )}
       
-      <PhaserGame key={gameKey} gameRef={gameRef} />
+      <PhaserGame gameRef={gameRef} />
       
       {isTouch && <MobileControls onMove={handleJoystickMove} onStop={handleJoystickStop} onChop={handleChop} />}
       {!isTouch && (
