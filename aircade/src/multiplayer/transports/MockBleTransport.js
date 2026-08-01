@@ -1,7 +1,5 @@
-import { EventBus } from '../../shared/EventBus';
 import { MessageCodec } from '../MessageCodec';
 import { TransportInterface } from './TransportInterface';
-import { BLE } from '../../shared/constants/BleConstants';
 
 export class MockBleTransport extends TransportInterface {
   constructor() {
@@ -16,17 +14,22 @@ export class MockBleTransport extends TransportInterface {
     this.reorder_chance = 0.0;
     this.msg_log = [];
     this._pending = [];
+    this.peers = new Map();
+    this.hostSimulation = null;
+    this._client_peer_id = null;
   }
 
   async initialize() {}
 
-  async host(opts) {
+  async host(_opts) {
     this.role = 'host';
-    this.peer_id = 'mock-host-' + Date.now();
+    this.peer_id = 'host-' + Date.now();
     this.connected = true;
-    setTimeout(() => {
-      if (this.on_peer_connected) this.on_peer_connected('mock-client');
-    }, 500);
+    this.peers.set(this.peer_id, { id: this.peer_id, isHost: true });
+  }
+
+  setHostSimulation(sim) {
+    this.hostSimulation = sim;
   }
 
   async scan() {
@@ -34,9 +37,11 @@ export class MockBleTransport extends TransportInterface {
     return { device_id: 'mock-host', name: 'Aircade-TEST', rssi: -40 };
   }
 
-  async connect(device_id) {
+  async connect(_device_id) {
     this.connected = true;
-    this.peer_id = device_id;
+    this._client_peer_id = 'client-' + Date.now();
+    this.peer_id = this._client_peer_id;
+    this.peers.set(this._client_peer_id, { id: this._client_peer_id, isHost: false });
     const join = this.codec.encode_join_req('Player');
     setTimeout(() => this._recv(join), this.latency);
   }
@@ -70,20 +75,23 @@ export class MockBleTransport extends TransportInterface {
 
   async broadcast_state(buf) {
     if (!this.connected || this.role !== 'host') return;
-    this._send(buf);
+    for (const peer of this.peers.values()) {
+      if (!peer.isHost) {
+        this._sendToPeer(peer.id, buf);
+      }
+    }
   }
 
   async broadcast_event(buf) {
     if (!this.connected || this.role !== 'host') return;
-    this._send(buf);
+    for (const peer of this.peers.values()) {
+      if (!peer.isHost) {
+        this._sendToPeer(peer.id, buf);
+      }
+    }
   }
 
-  async disconnect() {
-    this.connected = false;
-    if (this.on_peer_disconnected) this.on_peer_disconnected(this.peer_id);
-  }
-
-  _send(buf) {
+  _sendToPeer(peerId, buf) {
     if (Math.random() < this.packet_loss) return;
     const delay = this.latency + (Math.random() * 20 - 10);
     const deliver = () => {
@@ -104,6 +112,23 @@ export class MockBleTransport extends TransportInterface {
     }, delay);
   }
 
+  async disconnect() {
+    this.connected = false;
+    if (this.on_peer_disconnected) this.on_peer_disconnected(this.peer_id);
+  }
+
+  _send(buf) {
+    if (this.role === 'host') {
+      for (const peer of this.peers.values()) {
+        if (!peer.isHost) {
+          this._sendToPeer(peer.id, buf);
+        }
+      }
+    } else {
+      this._sendToPeer(this._client_peer_id || this.peer_id, buf);
+    }
+  }
+
   _recv(buf) {
     if (!this.connected) return;
     try {
@@ -113,9 +138,29 @@ export class MockBleTransport extends TransportInterface {
         this.on_state_update?.(msg);
       } else if (msg.type === 'EVENT' || msg.type === 'JOIN_ACCEPT' || msg.type === 'PONG' || msg.type === 'SYNC_RESP') {
         this.on_event?.(msg);
+      } else if (msg.type === 'INPUT' && this.hostSimulation) {
+        const senderId = this.role === 'host' ? this._client_peer_id : this.peer_id;
+        this.hostSimulation.queueInput(senderId, msg);
+      } else if (msg.type === 'JOIN_REQ' && this.role === 'host') {
+        this._handleJoinRequest(msg);
+      } else if (msg.type === 'SYNC_REQ' && this.role === 'host' && this.hostSimulation) {
+        const senderId = this._client_peer_id;
+        this.hostSimulation.handleSyncRequest(senderId);
       }
-    } catch (e) {
-      // console.warn('mock decode fail', e);
+    } catch {
+    }
+  }
+
+  _handleJoinRequest(_msg) {
+    if (!this._client_peer_id) return;
+    this.peers.set(this._client_peer_id, { id: this._client_peer_id, isHost: false });
+    if (this.on_peer_connected) this.on_peer_connected(this._client_peer_id);
+    if (this.hostSimulation) {
+      this.hostSimulation.addPlayer(this._client_peer_id);
+      const playerIndex = this.hostSimulation.getPlayerIndex(this._client_peer_id);
+      const snap = this.hostSimulation.getSnapshot(this._client_peer_id);
+      const buf = this.codec.encode_join_accept(playerIndex, this.hostSimulation.worldSeed || Math.floor(Math.random() * 65536), snap);
+      this._sendToPeer(this._client_peer_id, buf);
     }
   }
 

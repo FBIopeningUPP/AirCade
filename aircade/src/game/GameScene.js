@@ -1,9 +1,19 @@
 import Phaser from 'phaser';
+import { BLE } from '../shared/constants/BleConstants';
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
     super('GameScene');
     this.joystickData = { x: 0, y: 0 };
+    this.isHost = false;
+    this.playerId = null;
+    this.networkPlayers = new Map();
+    this.networkCampfires = new Map();
+    this.networkTrees = new Map();
+    this.networkRocks = new Map();
+    this.networkRadios = new Map();
+    this.lastSnapshotTick = 0;
+    this.darknessAlpha = 0;
   }
 
   preload() {
@@ -27,34 +37,13 @@ export default class GameScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player);
 
     this.trees = this.physics.add.staticGroup();
-    for (let i = 0; i < 20; i++) {
-      const x = Phaser.Math.Between(100, 3900);
-      const y = Phaser.Math.Between(100, 3900);
-      const tree = this.trees.create(x, y, 'tree').setDisplaySize(64, 128).setBlendMode(Phaser.BlendModes.MULTIPLY);
-      tree.body.setSize(tree.width * 0.4, tree.height * 0.3);
-      tree.body.setOffset(tree.width * 0.3, tree.height * 0.7);
-    }
-    this.physics.add.collider(this.player, this.trees);
-
     this.rocks = this.physics.add.staticGroup();
-    for (let i = 0; i < 15; i++) {
-      const x = Phaser.Math.Between(100, 3900);
-      const y = Phaser.Math.Between(100, 3900);
-      const rock = this.rocks.create(x, y, 'rock').setDisplaySize(48, 48).setBlendMode(Phaser.BlendModes.MULTIPLY);
-      rock.refreshBody();
-    }
-    this.physics.add.collider(this.player, this.rocks);
-
     this.radios = this.physics.add.staticGroup();
-    for (let i = 0; i < 3; i++) {
-      const x = Phaser.Math.Between(100, 3900);
-      const y = Phaser.Math.Between(100, 3900);
-      const radio = this.radios.create(x, y, 'radio').setDisplaySize(32, 32);
-      radio.refreshBody();
-    }
-    this.physics.add.collider(this.player, this.radios);
-
     this.campfires = this.physics.add.staticGroup();
+    
+    this.physics.add.collider(this.player, this.trees);
+    this.physics.add.collider(this.player, this.rocks);
+    this.physics.add.collider(this.player, this.radios);
     this.physics.add.collider(this.player, this.campfires);
 
     this.wasd = this.input.keyboard.addKeys('W,S,A,D');
@@ -67,53 +56,11 @@ export default class GameScene extends Phaser.Scene {
     });
     
     this.game.events.on('chopAction', () => {
-      let gathered = false;
-      
-      for (const tree of this.trees.getChildren()) {
-        if (tree.active) {
-          const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, tree.x, tree.y);
-          if (dist < 80) {
-            tree.destroy();
-            this.game.events.emit('itemGathered', 'Wood');
-            gathered = true;
-            break;
-          }
-        }
-      }
-
-      if (gathered) return;
-
-      for (const rock of this.rocks.getChildren()) {
-        if (rock.active) {
-          const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, rock.x, rock.y);
-          if (dist < 80) {
-            rock.destroy();
-            this.game.events.emit('itemGathered', 'Stone');
-            gathered = true;
-            break;
-          }
-        }
-      }
-
-      if (gathered) return;
-
-      for (const radio of this.radios.getChildren()) {
-        if (radio.active) {
-          const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, radio.x, radio.y);
-          if (dist < 80) {
-            radio.destroy();
-            this.game.events.emit('itemGathered', 'Radio');
-            break;
-          }
-        }
-      }
+      this.emit('chopAction');
     });
 
     this.game.events.on('craftCampfire', () => {
-      this.campfires.create(this.player.x, this.player.y, 'campfire')
-        .setDisplaySize(48, 48)
-        .setBlendMode(Phaser.BlendModes.MULTIPLY)
-        .refreshBody();
+      this.emit('craftCampfire');
     });
 
     this.scale.on('resize', () => {
@@ -126,19 +73,222 @@ export default class GameScene extends Phaser.Scene {
     this.darkness = this.add.rectangle(0, 0, 4000, 4000, 0x000000).setOrigin(0, 0).setAlpha(0).setDepth(100);
 
     this.time.addEvent({ delay: 3000, loop: true, callback: () => {
-      if (this.darkness.alpha > 0.5) {
+      if (this.darknessAlpha > 0.5 && !this.isHost) {
         let isWarm = false;
         for (const fire of this.campfires.getChildren()) {
-          if (Phaser.Math.Distance.Between(this.player.x, this.player.y, fire.x, fire.y) < 150) isWarm = true;
+          if (fire.active && Phaser.Math.Distance.Between(this.player.x, this.player.y, fire.x, fire.y) < 150) {
+            isWarm = true;
+          }
         }
         if (!isWarm) this.game.events.emit('takeDamage');
       }
     } });
   }
 
+  applySnapshot(snapshot) {
+    if (snapshot.type === 'SNAPSHOT') {
+      this._applyFullSnapshot(snapshot);
+    } else if (snapshot.type === 'DELTA') {
+      this._applyDelta(snapshot);
+    }
+    this.lastSnapshotTick = snapshot.tick;
+  }
+
+  _applyFullSnapshot(snap) {
+    this.darknessAlpha = snap.darkness_alpha / 255;
+    if (this.darkness) {
+      this.darkness.setAlpha(this.darknessAlpha);
+    }
+
+    const localPlayerData = snap.players[snap.local_player_id];
+    if (localPlayerData) {
+      this.player.setPosition(localPlayerData.x, localPlayerData.y);
+      this.player.body.setVelocity(localPlayerData.vx, localPlayerData.vy);
+    }
+
+    const currentPlayerIds = new Set(snap.players.map((_, i) => i));
+    for (const [id, netPlayer] of this.networkPlayers) {
+      if (!currentPlayerIds.has(id)) {
+        netPlayer.sprite.destroy();
+        this.networkPlayers.delete(id);
+      }
+    }
+
+    for (let i = 0; i < snap.players.length; i++) {
+      if (i === snap.local_player_id) continue;
+      const p = snap.players[i];
+      let netPlayer = this.networkPlayers.get(i);
+      if (!netPlayer) {
+        const sprite = this.physics.add.sprite(p.x, p.y, 'player').setDisplaySize(48, 48).setBlendMode(Phaser.BlendModes.MULTIPLY);
+        sprite.body.setSize(sprite.width * 0.7, sprite.height * 0.7);
+        sprite.body.setCollideWorldBounds(true);
+        this.physics.add.collider(sprite, this.trees);
+        this.physics.add.collider(sprite, this.rocks);
+        this.physics.add.collider(sprite, this.radios);
+        this.physics.add.collider(sprite, this.campfires);
+        netPlayer = { sprite, lastUpdate: this.time.now };
+        this.networkPlayers.set(i, netPlayer);
+      }
+      netPlayer.sprite.setPosition(p.x, p.y);
+      netPlayer.sprite.body.setVelocity(p.vx, p.vy);
+      netPlayer.lastUpdate = this.time.now;
+    }
+
+    this._syncEntities(this.trees, snap.trees || []);
+    this._syncEntities(this.rocks, snap.rocks || []);
+    this._syncEntities(this.radios, snap.radios || []);
+    this._syncCampfires(snap.campfires || []);
+  }
+
+  _applyDelta(delta) {
+    for (const change of delta.changes) {
+      if (change.entity_type === BLE.ENTITY_TYPES.TREE) {
+        if (change.flags & 0x01) {
+          const tree = this.trees.getChildren().find(t => t.entityId === change.entity_id);
+          if (tree) tree.destroy();
+        }
+      } else if (change.entity_type === BLE.ENTITY_TYPES.ROCK) {
+        if (change.flags & 0x01) {
+          const rock = this.rocks.getChildren().find(r => r.entityId === change.entity_id);
+          if (rock) rock.destroy();
+        }
+      } else if (change.entity_type === BLE.ENTITY_TYPES.RADIO) {
+        if (change.flags & 0x01) {
+          const radio = this.radios.getChildren().find(r => r.entityId === change.entity_id);
+          if (radio) radio.destroy();
+        }
+      } else if (change.entity_type === BLE.ENTITY_TYPES.CAMPFIRE) {
+        if (change.has_pos) {
+          let campfire = this.networkCampfires.get(change.entity_id);
+          if (!campfire) {
+            campfire = this.campfires.create(change.x, change.y, 'campfire')
+              .setDisplaySize(48, 48)
+              .setBlendMode(Phaser.BlendModes.MULTIPLY);
+            campfire.refreshBody();
+            this.networkCampfires.set(change.entity_id, campfire);
+          } else {
+            campfire.setPosition(change.x, change.y);
+            campfire.refreshBody();
+          }
+          campfire.entityId = change.entity_id;
+        }
+      }
+    }
+  }
+
+  _syncEntities(group, entities) {
+    const currentIds = new Set(entities.map(e => e.id));
+    for (const child of group.getChildren()) {
+      if (!currentIds.has(child.entityId)) {
+        child.destroy();
+      }
+    }
+    for (const e of entities) {
+      let entity = group.getChildren().find(c => c.entityId === e.id);
+      if (!entity) {
+        const texture = group === this.trees ? 'tree' : group === this.rocks ? 'rock' : 'radio';
+        const displaySize = group === this.trees ? { w: 64, h: 128 } : group === this.rocks ? { w: 48, h: 48 } : { w: 32, h: 32 };
+        entity = group.create(e.x, e.y, texture).setDisplaySize(displaySize.w, displaySize.h).setBlendMode(Phaser.BlendModes.MULTIPLY);
+        if (group === this.trees) {
+          entity.body.setSize(entity.width * 0.4, entity.height * 0.3);
+          entity.body.setOffset(entity.width * 0.3, entity.height * 0.7);
+        }
+        entity.refreshBody();
+        entity.entityId = e.id;
+      } else {
+        entity.setPosition(e.x, e.y);
+        entity.refreshBody();
+      }
+      entity.active = e.active;
+      entity.setVisible(e.active);
+    }
+  }
+
+  _syncCampfires(campfires) {
+    const currentIds = new Set(campfires.map(c => c.id));
+    for (const [id, cf] of this.networkCampfires) {
+      if (!currentIds.has(id)) {
+        cf.destroy();
+        this.networkCampfires.delete(id);
+      }
+    }
+    for (const c of campfires) {
+      let cf = this.networkCampfires.get(c.id);
+      if (!cf) {
+        cf = this.campfires.create(c.x, c.y, 'campfire')
+          .setDisplaySize(48, 48)
+          .setBlendMode(Phaser.BlendModes.MULTIPLY);
+        cf.refreshBody();
+        this.networkCampfires.set(c.id, cf);
+      }
+      cf.setPosition(c.x, c.y);
+      cf.refreshBody();
+      cf.active = c.active;
+      cf.setVisible(c.active);
+    }
+  }
+
+  handleEvent(evt) {
+    switch (evt.evt_type) {
+      case BLE.EVENT_TYPES.GATHER:
+        this._handleGatherEvent(evt);
+        break;
+      case BLE.EVENT_TYPES.CRAFT:
+        this._handleCraftEvent(evt);
+        break;
+      case BLE.EVENT_TYPES.DAMAGE:
+        if (evt.player_id === this.playerId) {
+          this.game.events.emit('takeDamage');
+        }
+        break;
+      case BLE.EVENT_TYPES.WIN:
+        this.game.events.emit('win');
+        break;
+      case BLE.EVENT_TYPES.PLAYER_JOINED:
+        break;
+      case BLE.EVENT_TYPES.PLAYER_LEFT:
+        const netPlayer = this.networkPlayers.get(evt.player_id);
+        if (netPlayer) {
+          netPlayer.sprite.destroy();
+          this.networkPlayers.delete(evt.player_id);
+        }
+        break;
+    }
+  }
+
+  _handleGatherEvent(evt) {
+    const targetId = evt.target_id;
+    const targetType = evt.item_id;
+    let group;
+    if (targetType === BLE.ITEM_IDS.WOOD) group = this.trees;
+    else if (targetType === BLE.ITEM_IDS.STONE) group = this.rocks;
+    else if (targetType === BLE.ITEM_IDS.RADIO) group = this.radios;
+    if (group) {
+      const entity = group.getChildren().find(e => e.entityId === targetId);
+      if (entity) {
+        entity.destroy();
+      }
+    }
+  }
+
+  _handleCraftEvent(evt) {
+    const campfire = this.campfires.create(evt.x, evt.y, 'campfire')
+      .setDisplaySize(48, 48)
+      .setBlendMode(Phaser.BlendModes.MULTIPLY);
+    campfire.refreshBody();
+    campfire.entityId = evt.campfire_id;
+    this.networkCampfires.set(evt.campfire_id, campfire);
+  }
+
+  setHostMode(isHost, playerId) {
+    this.isHost = isHost;
+    this.playerId = playerId;
+  }
+
   update() {
-    if (this.darkness && this.darkness.alpha < 0.85) {
-      this.darkness.alpha += 0.0001;
+    if (this.darkness && this.darknessAlpha < 0.85) {
+      this.darknessAlpha += 0.0001;
+      this.darkness.setAlpha(this.darknessAlpha);
     }
 
     this.player.body.setVelocity(0);

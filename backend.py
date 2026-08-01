@@ -1,67 +1,97 @@
 from flask import Flask, request, jsonify
-import jwt
+import hashlib
+import os
+import time
 
 app = Flask(__name__)
-SECRET = "change_me"
 
 users = {}
 scores = {}
+tokens = {}
 
-def get_user_from_token():
-    auth = request.headers.get('Authorization')
-    if not auth or not auth.startswith('Bearer '):
-        return None
-    token = auth[7:]
-    try:
-        data = jwt.decode(token, SECRET, algorithms=['HS256'])
-        return data.get('user')
-    except:
-        return None
+SECRET = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 
-@app.route('/signup', methods=['POST'])
+def hash_pw(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+def gen_token():
+    return hashlib.sha256(os.urandom(32)).hexdigest()
+
+def get_user_from_token(tok):
+    if tok in tokens:
+        return tokens[tok]
+    return None
+
+@app.route("/signup", methods=["POST"])
 def signup():
     data = request.get_json()
-    u = data.get('username')
-    p = data.get('password')
-    if not u or not p:
-        return jsonify({'error': 'username and password required'}), 400
-    if u in users:
-        return jsonify({'error': 'user exists'}), 400
-    users[u] = p
-    token = jwt.encode({'user': u}, SECRET, algorithm='HS256')
-    return jsonify({'token': token})
+    if not data:
+        return jsonify({"error": "json required"}), 400
+    username = data.get("username")
+    password = data.get("password")
+    if not username:
+        return jsonify({"error": "username required"}), 400
+    if not password:
+        return jsonify({"error": "password required"}), 400
+    if username in users:
+        return jsonify({"error": "username taken"}), 400
+    users[username] = hash_pw(password)
+    scores[username] = []
+    tok = gen_token()
+    tokens[tok] = username
+    return jsonify({"token": tok})
 
-@app.route('/login', methods=['POST'])
+@app.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
-    u = data.get('username')
-    p = data.get('password')
-    if users.get(u) != p:
-        return jsonify({'error': 'invalid credentials'}), 401
-    token = jwt.encode({'user': u}, SECRET, algorithm='HS256')
-    return jsonify({'token': token})
+    if not data:
+        return jsonify({"error": "json required"}), 400
+    username = data.get("username")
+    password = data.get("password")
+    if not username or not password:
+        return jsonify({"error": "username and password required"}), 400
+    if username not in users:
+        return jsonify({"error": "user not found"}), 401
+    if users[username] != hash_pw(password):
+        return jsonify({"error": "incorrect password"}), 401
+    tok = gen_token()
+    tokens[tok] = username
+    return jsonify({"token": tok})
 
-@app.route('/score', methods=['POST'])
+@app.route("/score", methods=["POST"])
 def submit_score():
-    user = get_user_from_token()
-    if not user:
-        return jsonify({'error': 'unauthorized'}), 401
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return jsonify({"error": "token required"}), 401
+    tok = auth[7:]
+    username = get_user_from_token(tok)
+    if not username:
+        return jsonify({"error": "invalid token"}), 401
     data = request.get_json()
-    sc = data.get('score')
-    if not isinstance(sc, int):
-        return jsonify({'error': 'score must be integer'}), 400
-    if sc > scores.get(user, 0):
-        scores[user] = sc
-        # print(f'new high for {user}: {sc}')
-    return jsonify({'high_score': scores[user]})
+    if not data:
+        return jsonify({"error": "json required"}), 400
+    score = data.get("score")
+    if score is None:
+        return jsonify({"error": "score required"}), 400
+    try:
+        score = int(score)
+    except (ValueError, TypeError):
+        return jsonify({"error": "score must be integer"}), 400
+    scores[username].append({"score": score, "ts": time.time()})
+    # print(f"saved score {score} for {username}")
+    return jsonify({"ok": True})
 
-@app.route('/leaderboard')
+@app.route("/leaderboard", methods=["GET"])
 def leaderboard():
-    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    top = [{'username': u, 'score': s} for u, s in sorted_scores[:10]]
+    all_scores = []
+    for user, user_scores in scores.items():
+        for s in user_scores:
+            all_scores.append({"username": user, "score": s["score"], "ts": s["ts"]})
+    all_scores.sort(key=lambda x: x["score"], reverse=True)
+    top = all_scores[:10]
     return jsonify(top)
 
-# TODO: add token expiration
+# TODO: add token expiration cleanup
 
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)

@@ -1,5 +1,5 @@
-import { BinWriter, BinReader, packPos, unpackPos } from '../../shared/utilities/binary';
-import { BLE } from '../../shared/constants/BleConstants';
+import { BinWriter, BinReader, packPos, unpackPos } from '../shared/utilities/binary';
+import { BLE } from '../shared/constants/BleConstants';
 
 export class MessageCodec {
   constructor() {
