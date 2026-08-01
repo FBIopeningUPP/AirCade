@@ -1,101 +1,72 @@
 import Phaser from 'phaser';
+import { multiplayerManager } from '../multiplayer/MultiplayerManager';
+import { BLE } from '../shared/constants/BleConstants';
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
     super('GameScene');
   }
 
-  init(data) {
-    this.socket = data?.socket;
-    this.roomData = data?.roomData;
-    this.joystickData = { x: 0, y: 0 };
-    this.otherPlayers = {};
-  }
-
   preload() {
-    this.load.spritesheet('player', '/player_sheet_aligned_fixed.png', { frameWidth: 256, frameHeight: 256 });
-    this.load.image('grass', '/grass_tile.png');
-    this.load.image('sand', '/sand_tile.png');
-    this.load.spritesheet('water', '/water_sheet.png', { frameWidth: 64, frameHeight: 64 });
-    this.load.image('tree', '/tree.png');
-    this.load.image('rock', '/rock.png');
-    this.load.image('campfire', '/campfire.png');
-    this.load.image('radio', '/radio_part.png');
-    this.load.image('helicopter', '/helicopter.png');
-    this.load.audio('sfx_chop', ['sfx_chop.mp3', 'sfx_chop.wav', 'sfx_chop.ogg']);
-    this.load.audio('sfx_wind', ['sfx_wind.mp3', 'sfx_wind.wav', 'sfx_wind.ogg']);
-    this.load.audio('sfx_fire', ['sfx_fire.mp3', 'sfx_fire.wav', 'sfx_fire.ogg']);
+    this.load.spritesheet('player', 'https://labs.phaser.io/assets/sprites/spaceman.png', { frameWidth: 16, frameHeight: 16 });
+    this.load.image('tree', 'https://labs.phaser.io/assets/sprites/pine.png');
+    this.load.image('rock', 'https://labs.phaser.io/assets/sprites/asteroid.png');
+    this.load.image('radio', 'https://labs.phaser.io/assets/sprites/platformer/powerup.png');
+    this.load.image('campfire', 'https://labs.phaser.io/assets/sprites/fire3.png');
+    this.load.spritesheet('water', 'https://labs.phaser.io/assets/sprites/water.png', { frameWidth: 32, frameHeight: 32 });
+    this.load.image('helicopter', 'https://labs.phaser.io/assets/sprites/enemy-bird.png');
+    
+    this.load.audio('sfx_chop', 'https://labs.phaser.io/assets/audio/SoundEffects/squit.wav');
+    this.load.audio('sfx_wind', 'https://labs.phaser.io/assets/audio/SoundEffects/bodenst-magical_sweep.mp3');
+    this.load.audio('sfx_fire', 'https://labs.phaser.io/assets/audio/SoundEffects/magical_horror_audiosprite.mp3');
   }
 
   create() {
-    this.inventory = { Wood: 0, Stone: 0, Radio: 0 };
+    this.scale.resize(window.innerWidth, window.innerHeight);
+
     this.health = 100;
+    this.inventory = { Wood: 0, Stone: 0, Radio: 0 };
     this.isDead = false;
+    this.isWinning = false;
+    this.joystickData = { x: 0, y: 0 };
+    this.chopRequested = false;
+    this.craftRequested = false;
+    
+    this.players = {}; // Map of id -> { sprite, nameText, id }
+    this.trees = new Map();
+    this.rocks = new Map();
+    this.radios = new Map();
+    this.campfires = new Map();
+
+    const bgGraphics = this.add.graphics();
+    bgGraphics.fillStyle(0x34495e, 1);
+    bgGraphics.fillRect(-2000, -2000, 10000, 10000);
+    bgGraphics.fillStyle(0x76b852, 1);
+    bgGraphics.fillRoundedRect(0, 0, 4000, 4000, 200);
+    bgGraphics.generateTexture('island_bg', 10000, 10000);
+    bgGraphics.destroy();
+    
+    this.add.image(1000, 1000, 'island_bg').setOrigin(0, 0).setDepth(-10);
 
     this.anims.create({ key: 'water_wave', frames: this.anims.generateFrameNumbers('water', { start: 0, end: 2 }), frameRate: 4, repeat: -1 });
 
-    const tileSize = 64;
-    const mapSizeTiles = 64;
-
-    const map = this.make.tilemap({ tileWidth: tileSize, tileHeight: tileSize, width: mapSizeTiles, height: mapSizeTiles });
-    const tsWater = map.addTilesetImage('water', 'water');
-    const tsSand = map.addTilesetImage('sand', 'sand');
-    const tsGrass = map.addTilesetImage('grass', 'grass');
-    
-    const waterLayer = map.createBlankLayer('waterLayer', tsWater).setDepth(-10);
-    const sandLayer = map.createBlankLayer('sandLayer', tsSand).setDepth(-10);
-    const grassLayer = map.createBlankLayer('grassLayer', tsGrass).setDepth(-10);
-
-    for (let x = 0; x < mapSizeTiles; x++) {
-      for (let y = 0; y < mapSizeTiles; y++) {
-        if (x < 6 || x > 57 || y < 6 || y > 57) {
-          waterLayer.putTileAt(0, x, y);
-        } else if (x < 9 || x > 54 || y < 9 || y > 54) {
-          sandLayer.putTileAt(0, x, y);
-        } else {
-          grassLayer.putTileAt(0, x, y);
-        }
-      }
-    }
-
-    this.waterLayer = waterLayer;
-    this.waterFrame = 0;
-    this.time.addEvent({
-      delay: 500,
-      loop: true,
-      callback: () => {
-        this.waterFrame = (this.waterFrame + 1) % 3;
-        this.waterLayer.forEachTile(tile => {
-          if (tile) tile.index = this.waterFrame;
-        });
-      }
-    });
-
     const graphics = this.add.graphics();
-    graphics.fillStyle(0xffffff, 1);
+    graphics.fillStyle(0xcccccc, 1);
     graphics.fillCircle(4, 4, 4);
     graphics.generateTexture('smoke', 8, 8);
     graphics.destroy();
 
     const dustGraphics = this.add.graphics();
-    dustGraphics.fillStyle(0x8B4513, 1);
+    dustGraphics.fillStyle(0xffffff, 0.5);
     dustGraphics.fillCircle(3, 3, 3);
     dustGraphics.generateTexture('dust', 6, 6);
     dustGraphics.destroy();
 
     const sf = this.add.graphics();
     sf.fillStyle(0xffffff, 0.8);
-    sf.fillRect(0,0,2,2);
+    sf.fillCircle(1, 1, 1);
     sf.generateTexture('snowflake', 2, 2);
     sf.destroy();
-
-    this.cameras.main.setBounds(500, 500, 4096 - 1000, 4096 - 1000);
-    this.physics.world.setBounds(500, 500, 4096 - 1000, 4096 - 1000);
-    
-    this.player = this.physics.add.sprite(4096 / 2, 4096 / 2, 'player').setDisplaySize(48, 48);
-    this.player.body.setSize(this.player.width * 0.7, this.player.height * 0.7);
-    this.player.body.setCollideWorldBounds(true);
-    this.cameras.main.startFollow(this.player);
 
     this.anims.create({ key: 'walk_down', frames: this.anims.generateFrameNumbers('player', { start: 0, end: 3 }), frameRate: 8, repeat: -1 });
     this.anims.create({ key: 'walk_left', frames: this.anims.generateFrameNumbers('player', { start: 4, end: 7 }), frameRate: 8, repeat: -1 });
@@ -107,64 +78,6 @@ export default class GameScene extends Phaser.Scene {
     this.anims.create({ key: 'idle_right', frames: [ { key: 'player', frame: 8 } ], frameRate: 8 });
     this.anims.create({ key: 'idle_up', frames: [ { key: 'player', frame: 12 } ], frameRate: 8 });
 
-    this.lastDirection = 'down';
-    this.player.anims.play('idle_down', true);
-
-    this.otherPlayersGroup = this.physics.add.group();
-    if (this.roomData && this.roomData.players) {
-      this.roomData.players.forEach(p => {
-        if (p.id !== this.roomData.myId) {
-          this.spawnRemotePlayer(p);
-        }
-      });
-    }
-
-    if (this.socket) {
-      this.socket.on('playerJoined', (p) => {
-        if (p.id !== this.roomData.myId && !this.otherPlayers[p.id]) {
-          this.spawnRemotePlayer(p);
-        }
-      });
-
-      this.socket.on('playerLeft', (id) => {
-        if (this.otherPlayers[id]) {
-          this.otherPlayers[id].sprite.destroy();
-          this.otherPlayers[id].nameText.destroy();
-          delete this.otherPlayers[id];
-        }
-      });
-
-      this.socket.on('playerMoved', (data) => {
-        if (this.otherPlayers[data.id]) {
-          const remote = this.otherPlayers[data.id];
-          remote.sprite.setPosition(data.x, data.y);
-          remote.sprite.anims.play(data.anim, true);
-          remote.nameText.setPosition(data.x, data.y - 30);
-        }
-      });
-
-      this.socket.on('resourceGathered', (data) => {
-        // Find the resource by x/y
-        let group;
-        if (data.type === 'tree') group = this.trees;
-        if (data.type === 'rock') group = this.rocks;
-        if (data.type === 'radio') group = this.radios;
-        
-        if (group) {
-          const item = group.getChildren().find(i => Math.abs(i.x - data.x) < 5 && Math.abs(i.y - data.y) < 5);
-          if (item) {
-            this.splinterEmitter.setParticleTint(data.type === 'tree' ? 0x8B4513 : 0x95a5a6);
-            this.splinterEmitter.emitParticleAt(item.x, item.y, 10);
-            item.destroy();
-          }
-        }
-      });
-
-      this.socket.on('craftCampfire', (data) => {
-        this.spawnCampfire(data.x, data.y);
-      });
-    }
-
     this.dustEmitter = this.add.particles(0, 0, 'dust', {
       speed: { min: 10, max: 20 },
       angle: { min: 0, max: 360 },
@@ -174,7 +87,6 @@ export default class GameScene extends Phaser.Scene {
       frequency: 100,
       emitting: false
     }).setDepth(10);
-    this.dustEmitter.startFollow(this.player, 0, 24);
 
     this.splinterEmitter = this.add.particles(0, 0, 'dust', {
       speed: { min: 50, max: 150 },
@@ -194,170 +106,26 @@ export default class GameScene extends Phaser.Scene {
     }).setDepth(150);
     this.snowEmitter.startFollow(this.cameras.main);
 
-    const getSafeSpawn = (groupArray) => {
-      let x, y, safe;
-      do {
-        safe = true;
-        x = Phaser.Math.Between(600, 3496);
-        y = Phaser.Math.Between(600, 3496);
-        for (let g of groupArray) {
-          if (g) {
-            g.getChildren().forEach(item => {
-              if (Phaser.Math.Distance.Between(x, y, item.x, item.y) < 100) safe = false;
-            });
-          }
-        }
-      } while (!safe);
-      return { x, y };
-    };
-
-    // Helper to set a centered hitbox based on a proportion of the sprite size
-    const setHitbox = (obj, proportion = 0.6) => {
-      const w = obj.displayWidth * proportion;
-      const h = obj.displayHeight * proportion;
-      obj.body.setSize(w, h);
-      obj.body.setOffset((obj.displayWidth - w) / 2, (obj.displayHeight - h) / 2);
-    };
-
-    this.trees = this.physics.add.staticGroup();
-    for (let i = 0; i < 20; i++) {
-      const pos = getSafeSpawn([this.trees, this.rocks, this.radios]);
-      const tree = this.trees.create(pos.x, pos.y, 'tree').setDisplaySize(64, 128);
-      setHitbox(tree, 0.6);
-      tree.refreshBody();
-    }
-    this.physics.add.collider(this.player, this.trees);
-
-    this.rocks = this.physics.add.staticGroup();
-    for (let i = 0; i < 15; i++) {
-      const pos = getSafeSpawn([this.trees, this.rocks, this.radios]);
-      const rock = this.rocks.create(pos.x, pos.y, 'rock').setDisplaySize(48, 48);
-      setHitbox(rock, 0.7);
-      rock.refreshBody();
-    }
-    this.physics.add.collider(this.player, this.rocks);
-
-    this.radios = this.physics.add.staticGroup();
-    for (let i = 0; i < 3; i++) {
-      const pos = getSafeSpawn([this.trees, this.rocks, this.radios]);
-      const radio = this.radios.create(pos.x, pos.y, 'radio').setDisplaySize(32, 32);
-      setHitbox(radio, 0.7);
-      radio.refreshBody();
-    }
-    this.physics.add.collider(this.player, this.radios);
-
-    this.campfires = this.physics.add.staticGroup();
-    this.physics.add.collider(this.player, this.campfires);
-
     this.wasd = this.input.keyboard.addKeys('W,S,A,D');
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
-    this.game.events.on('joystickMove', (data) => {
-      this.joystickData = data;
-    });
-    this.game.events.on('joystickStop', () => {
-      this.joystickData = { x: 0, y: 0 };
-    });
-    
-    this.game.events.on('chopAction', () => {
-      if (this.isDead) return;
+    this.game.events.on('joystickMove', (data) => { this.joystickData = data; });
+    this.game.events.on('joystickStop', () => { this.joystickData = { x: 0, y: 0 }; });
+    this.game.events.on('chopAction', () => { this.chopRequested = true; });
+    this.game.events.on('requestCraft', () => { this.craftRequested = true; });
+    this.game.events.on('restartGame', () => { this.scene.restart(); });
 
-      // physics.overlap doesn't fire in event handlers (only in update loop).
-      // Use manual distance check instead - reach radius of 80px.
-      const REACH = 80;
-      let gathered = false;
-
-      // Check trees
-      for (const tree of this.trees.getChildren()) {
-        if (gathered) break;
-        const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, tree.x, tree.y);
-        if (dist < REACH) {
-          this.splinterEmitter.setParticleTint(0x8B4513);
-          this.splinterEmitter.emitParticleAt(tree.x, tree.y, 10);
-          this.cameras.main.shake(100, 0.005);
-          if (this.socket) this.socket.emit('resourceGathered', { type: 'tree', x: tree.x, y: tree.y });
-          tree.destroy();
-          this.inventory.Wood++;
-          this.emitHUDUpdate();
-          this.spawnFloatingText('+1 Wood', '#2ecc71');
-          this.playSound('sfx_chop', { volume: 0.5 });
-          gathered = true;
-        }
-      }
-
-      if (gathered) return;
-
-      // Check rocks
-      for (const rock of this.rocks.getChildren()) {
-        if (gathered) break;
-        const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, rock.x, rock.y);
-        if (dist < REACH) {
-          this.splinterEmitter.setParticleTint(0x95a5a6);
-          this.splinterEmitter.emitParticleAt(rock.x, rock.y, 10);
-          this.cameras.main.shake(100, 0.005);
-          if (this.socket) this.socket.emit('resourceGathered', { type: 'rock', x: rock.x, y: rock.y });
-          rock.destroy();
-          this.inventory.Stone++;
-          this.emitHUDUpdate();
-          this.spawnFloatingText('+1 Stone', '#95a5a6');
-          this.playSound('sfx_chop', { volume: 0.5 });
-          gathered = true;
-        }
-      }
-
-      if (gathered) return;
-
-      // Check radios
-      for (const radio of this.radios.getChildren()) {
-        if (gathered) break;
-        const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, radio.x, radio.y);
-        if (dist < REACH) {
-          if (this.socket) this.socket.emit('resourceGathered', { type: 'radio', x: radio.x, y: radio.y });
-          radio.destroy();
-          this.inventory.Radio++;
-          this.emitHUDUpdate();
-          this.spawnFloatingText('+1 Radio', '#3498db');
-          this.playSound('sfx_chop', { volume: 0.3 });
-          gathered = true;
-        }
-      }
-    });
-
-    this.game.events.on('requestCraft', () => {
-      if (this.isDead) return;
-      if (this.inventory.Wood >= 2 && this.inventory.Stone >= 1) {
-        this.inventory.Wood -= 2;
-        this.inventory.Stone -= 1;
-        this.emitHUDUpdate();
-        
-        if (this.socket) this.socket.emit('craftCampfire', { x: this.player.x, y: this.player.y });
-        this.spawnCampfire(this.player.x, this.player.y);
-      }
-    });
-
-    this.game.events.on('restartGame', () => {
-      this.scene.restart();
-    });
+    this.game.events.on('stateUpdate', (snap) => this.onStateUpdate(snap));
+    this.game.events.on('networkEvent', (evt) => this.onNetworkEvent(evt));
 
     this.scale.on('resize', () => {
       const width = this.scale.width;
       const height = this.scale.height;
       const zoom = Math.max(width, height) / 1200;
       this.cameras.main.setZoom(zoom);
-      if (this.darknessLayer) {
-        this.darknessLayer.resize(width, height);
-      }
-      if (this.minimap) {
-        const mmSize = Math.min(200, width * 0.3);
-        const mmX = width - mmSize - 20;
-        this.minimap.setViewport(mmX, 20, mmSize, mmSize);
-        if (this.borderGraphics) {
-          this.borderGraphics.clear();
-          this.borderGraphics.lineStyle(4, 0xffffff, 1);
-          this.borderGraphics.strokeRect(mmX, 20, mmSize, mmSize);
-        }
-      }
+      if (this.darknessLayer) this.darknessLayer.resize(width, height);
     });
+    
     const zoom = Math.max(this.scale.width, this.scale.height) / 1200;
     this.cameras.main.setZoom(zoom);
 
@@ -367,50 +135,21 @@ export default class GameScene extends Phaser.Scene {
     holeGraphics.generateTexture('lightHole', 300, 300);
     holeGraphics.destroy();
 
-    const bgGraphics = this.add.graphics();
-    bgGraphics.fillStyle(0x000000, 1);
-    bgGraphics.fillRect(0, 0, 8000, 8000);
-    bgGraphics.generateTexture('blackBg', 8000, 8000);
-    bgGraphics.destroy();
+    const bgGraphics2 = this.add.graphics();
+    bgGraphics2.fillStyle(0x000000, 1);
+    bgGraphics2.fillRect(0, 0, 8000, 8000);
+    bgGraphics2.generateTexture('blackBg', 8000, 8000);
+    bgGraphics2.destroy();
 
-    this.darknessAlpha = 0;
-    this.darknessDirection = 1;
-    this.dayCount = 1;
     this.darknessLayer = this.add.renderTexture(0, 0, this.scale.width, this.scale.height).setDepth(100).setAlpha(0).setScrollFactor(0);
 
-    this.time.addEvent({ delay: 3000, loop: true, callback: () => {
-      if (this.darknessAlpha > 0.5) {
-        let isWarm = false;
-        for (const fire of this.campfires.getChildren()) {
-          if (Phaser.Math.Distance.Between(this.player.x, this.player.y, fire.x, fire.y) < 150) isWarm = true;
-        }
-        if (!isWarm && !this.isDead) {
-          this.health = Math.max(0, this.health - 5);
-          this.emitHUDUpdate();
-          this.cameras.main.shake(200, 0.01);
-          this.spawnFloatingText('-5 HP', '#e74c3c');
-          this.player.setTint(0xff0000);
-          this.time.delayedCall(200, () => this.player.clearTint());
-          if (this.health <= 0) {
-            this.isDead = true;
-            this.game.events.emit('gameOver');
-          }
-        }
-      }
-    } });
-
-    // Initial HUD update
-    this.time.delayedCall(100, () => this.emitHUDUpdate());
-
     const dummySound = { volume: 0, play: () => {}, destroy: () => {} };
-    
     try {
       this.windSound = this.sound.add('sfx_wind', { loop: true, volume: 0 });
       this.windSound.play();
     } catch {
       this.windSound = dummySound;
     }
-
     try {
       this.fireSound = this.sound.add('sfx_fire', { loop: true, volume: 0 });
       this.fireSound.play();
@@ -418,179 +157,256 @@ export default class GameScene extends Phaser.Scene {
       this.fireSound = dummySound;
     }
 
-    const initWidth = this.scale.width;
-    const initMmSize = Math.min(200, initWidth * 0.3);
-    const initMmX = initWidth - initMmSize - 20;
-
-    this.minimap = this.cameras.add(initMmX, 20, initMmSize, initMmSize).setZoom(0.05).setName('mini');
-    this.minimap.startFollow(this.player);
-    this.minimap.ignore(this.darknessLayer);
-
-    const borderGraphics = this.add.graphics();
-    borderGraphics.lineStyle(4, 0xffffff, 1);
-    borderGraphics.strokeRect(initMmX, 20, initMmSize, initMmSize);
-    borderGraphics.setScrollFactor(0);
-    this.minimap.ignore(borderGraphics);
-    this.borderGraphics = borderGraphics;
-
     this.events.once('shutdown', () => {
       this.game.events.off('joystickMove');
       this.game.events.off('joystickStop');
       this.game.events.off('chopAction');
       this.game.events.off('requestCraft');
       this.game.events.off('restartGame');
+      this.game.events.off('stateUpdate');
+      this.game.events.off('networkEvent');
       if (this.windSound) this.windSound.destroy();
       if (this.fireSound) this.fireSound.destroy();
-      if (this.socket) {
-        this.socket.off('playerJoined');
-        this.socket.off('playerLeft');
-        this.socket.off('playerMoved');
-        this.socket.off('resourceGathered');
-        this.socket.off('craftCampfire');
-      }
     });
+
+    if (multiplayerManager.worldSeed != null) {
+      this._initWorld(multiplayerManager.worldSeed);
+    }
   }
 
-  spawnCampfire(x, y) {
-    const campfire = this.campfires.create(x, y, 'campfire').setDisplaySize(48, 48);
-    const w = campfire.displayWidth * 0.6;
-    const h = campfire.displayHeight * 0.6;
-    campfire.body.setSize(w, h);
-    campfire.body.setOffset((campfire.displayWidth - w) / 2, (campfire.displayHeight - h) / 2);
-    campfire.refreshBody();
-
-    this.add.particles(campfire.x, campfire.y, 'smoke', {
-      speed: { min: 20, max: 40 },
-      angle: { min: 250, max: 290 },
-      scale: { start: 1, end: 3 },
-      alpha: { start: 0.5, end: 0 },
-      lifespan: 2000,
-      frequency: 200,
-      blendMode: 'ADD'
-    }).setDepth(50);
-  }
-
-  spawnRemotePlayer(p) {
-    const sprite = this.physics.add.sprite(p.x, p.y, 'player').setDisplaySize(48, 48);
-    sprite.body.setSize(sprite.width * 0.7, sprite.height * 0.7);
-    sprite.setCollideWorldBounds(true);
-    sprite.anims.play(p.anim, true);
+  _initWorld(seed) {
+    const rng = this._seededRandom(seed);
     
-    const nameText = this.add.text(p.x, p.y - 30, p.name, {
-      fontSize: '12px',
-      color: '#fff',
-      stroke: '#000',
-      strokeThickness: 3,
-      fontFamily: 'Silkscreen, monospace'
-    }).setOrigin(0.5).setDepth(200);
+    let nextEntityId = 1;
+    const entityTypes = { TREE: 0, ROCK: 1, RADIO: 2 };
 
-    this.otherPlayersGroup.add(sprite);
-    this.otherPlayers[p.id] = { sprite, nameText, id: p.id };
-  }
-
-  playSound(key, config) {
-    if (this.cache.audio.exists(key)) {
-      try {
-        this.sound.play(key, config);
-      } catch (e) {
-        console.warn('Play sound failed for', key, e);
-      }
+    for (let i = 0; i < 20; i++) {
+      const id = nextEntityId++;
+      const x = Math.floor(rng() * 3800) + 100;
+      const y = Math.floor(rng() * 3800) + 100;
+      const sprite = this.add.image(x, y, 'tree').setDisplaySize(64, 128).setDepth(y);
+      this.trees.set(id, { id, type: entityTypes.TREE, x, y, sprite });
+    }
+    for (let i = 0; i < 15; i++) {
+      const id = nextEntityId++;
+      const x = Math.floor(rng() * 3800) + 100;
+      const y = Math.floor(rng() * 3800) + 100;
+      const sprite = this.add.image(x, y, 'rock').setDisplaySize(48, 48).setDepth(y);
+      this.rocks.set(id, { id, type: entityTypes.ROCK, x, y, sprite });
+    }
+    for (let i = 0; i < 3; i++) {
+      const id = nextEntityId++;
+      const x = Math.floor(rng() * 3800) + 100;
+      const y = Math.floor(rng() * 3800) + 100;
+      const sprite = this.add.image(x, y, 'radio').setDisplaySize(32, 32).setDepth(y);
+      this.radios.set(id, { id, type: entityTypes.RADIO, x, y, sprite });
     }
   }
 
-  emitHUDUpdate() {
-    this.game.events.emit('updateHUD', {
-      health: this.health,
-      inventory: this.inventory
-    });
+  _seededRandom(seed) {
+    let s = seed >>> 0;
+    return () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 4294967296;
+    };
   }
 
-  spawnFloatingText(text, color) {
-    const floating = this.add.text(this.player.x, this.player.y - 30, text, {
-      fontSize: '20px',
-      color: color,
-      stroke: '#000',
-      strokeThickness: 4,
-      fontFamily: 'Silkscreen, monospace'
-    }).setOrigin(0.5).setDepth(200);
+  onStateUpdate(snap) {
+    if (this.isWinning) return;
 
-    this.tweens.add({
-      targets: floating,
-      y: this.player.y - 80,
-      alpha: 0,
-      duration: 1500,
-      onComplete: () => floating.destroy()
-    });
-  }
-
-  update(time, delta) {
-    if (this.inventory.Radio >= 3) {
-      if (!this.isWinning) {
-        this.isWinning = true;
-        this.isDead = true;
-        this.player.body.setVelocity(0);
-        this.dustEmitter.emitting = false;
-        
-        this.cameras.main.pan(this.player.x, this.player.y, 1000, 'Sine.easeInOut');
-        
-        const heli = this.add.sprite(this.cameras.main.scrollX - 400, this.player.y - 150, 'helicopter').setDepth(200);
-        this.tweens.add({
-          targets: heli,
-          x: this.player.x + 800,
-          duration: 4000,
-          onComplete: () => this.game.events.emit('gameWon')
-        });
-      }
-      return;
-    }
-
-    if (this.isDead) {
-      this.player.body.setVelocity(0);
-      this.dustEmitter.emitting = false;
-      // Continue updating the darkness layer and particles even if dead
-    }
-
-    if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-      this.game.events.emit('chopAction');
-    }
-
-    this.darknessAlpha += (0.0001 / 16) * delta * this.darknessDirection;
-    if (this.darknessAlpha >= 0.85) {
-      this.darknessAlpha = 0.85;
-      this.darknessDirection = -1;
-    } else if (this.darknessAlpha <= 0) {
-      this.darknessAlpha = 0;
-      if (this.darknessDirection === -1) {
-        this.darknessDirection = 1;
-        this.dayCount++;
-        this.game.events.emit('newDay', this.dayCount);
-      }
-    }
-    this.darknessLayer.setAlpha(this.darknessAlpha);
-    this.windSound.volume = this.darknessAlpha;
-
-    if (this.darknessAlpha > 0.4) {
+    // Update darkness
+    const targetAlpha = snap.darkness_alpha / 255;
+    this.darknessLayer.setAlpha(targetAlpha);
+    this.windSound.volume = targetAlpha;
+    if (targetAlpha > 0.4) {
       this.snowEmitter.emitting = true;
-      const intensity = (this.darknessAlpha - 0.4) / 0.45;
+      const intensity = (targetAlpha - 0.4) / 0.45;
       this.snowEmitter.setFrequency(100 - (intensity * 80));
     } else {
       this.snowEmitter.emitting = false;
     }
+
+    // Process players
+    const activeIds = new Set();
+    for (const p of snap.players) {
+      activeIds.add(p.id);
+      let playerObj = this.players[p.id];
+      if (!playerObj) {
+        const sprite = this.add.sprite(p.x, p.y, 'player').setDisplaySize(48, 48);
+        const nameText = this.add.text(p.x, p.y - 30, `P${p.id}`, {
+          fontSize: '12px', color: '#fff', stroke: '#000', strokeThickness: 3, fontFamily: 'Silkscreen, monospace'
+        }).setOrigin(0.5).setDepth(200);
+        playerObj = { id: p.id, sprite, nameText, lastDirection: 'down' };
+        this.players[p.id] = playerObj;
+      }
+
+      // Update position
+      playerObj.sprite.setPosition(p.x, p.y);
+      playerObj.nameText.setPosition(p.x, p.y - 30);
+      playerObj.sprite.setDepth(p.y);
+
+      // Simple animation logic based on vx/vy
+      let isMoving = Math.abs(p.vx) > 0.1 || Math.abs(p.vy) > 0.1;
+      if (isMoving) {
+        if (Math.abs(p.vx) > Math.abs(p.vy)) {
+          if (p.vx < 0) { playerObj.sprite.anims.play('walk_left', true); playerObj.lastDirection = 'left'; }
+          else { playerObj.sprite.anims.play('walk_right', true); playerObj.lastDirection = 'right'; }
+        } else {
+          if (p.vy < 0) { playerObj.sprite.anims.play('walk_up', true); playerObj.lastDirection = 'up'; }
+          else { playerObj.sprite.anims.play('walk_down', true); playerObj.lastDirection = 'down'; }
+        }
+        if (p.id === snap.local_player_id) {
+          this.dustEmitter.emitting = true;
+          this.dustEmitter.setPosition(p.x, p.y + 24);
+        }
+      } else {
+        playerObj.sprite.anims.play(`idle_${playerObj.lastDirection}`, true);
+        if (p.id === snap.local_player_id) this.dustEmitter.emitting = false;
+      }
+
+      // If it's the local player, update HUD and Camera
+      if (p.id === snap.local_player_id) {
+        this.cameras.main.startFollow(playerObj.sprite);
+        this.health = p.health;
+        this.inventory = { Wood: p.inv.wood, Stone: p.inv.stone, Radio: p.inv.radio };
+        this.isDead = p.health <= 0;
+        this.emitHUDUpdate();
+        
+        if (this.isDead && !this.isWinning) {
+          this.game.events.emit('gameOver');
+        }
+        if (this.inventory.Radio >= 3 && !this.isWinning) {
+          this.triggerWin(playerObj.sprite);
+        }
+      }
+    }
+
+    // Cleanup disconnected players
+    for (const id in this.players) {
+      if (!activeIds.has(Number(id))) {
+        this.players[id].sprite.destroy();
+        this.players[id].nameText.destroy();
+        delete this.players[id];
+      }
+    }
+
+    // Process campfires (snap.campfires doesn't have IDs, just active positions)
+    // We recreate them every tick for simplicity in the mock.
+    for (const [_, cf] of this.campfires) cf.sprite.destroy();
+    this.campfires.clear();
+    
+    snap.campfires.forEach((c, idx) => {
+      if (c.active) {
+        const sprite = this.add.image(c.x, c.y, 'campfire').setDisplaySize(48, 48).setDepth(c.y);
+        this.campfires.set(idx, { x: c.x, y: c.y, sprite });
+      }
+    });
+  }
+
+  onNetworkEvent(evt) {
+    if (evt.evt_type === BLE.EVENT_TYPES.GATHER) {
+      let group;
+      if (evt.item_id === BLE.ITEM_IDS.WOOD) group = this.trees;
+      if (evt.item_id === BLE.ITEM_IDS.STONE) group = this.rocks;
+      if (evt.item_id === BLE.ITEM_IDS.RADIO) group = this.radios;
+      
+      if (group && group.has(evt.target_id)) {
+        const item = group.get(evt.target_id);
+        this.splinterEmitter.setParticleTint(evt.item_id === BLE.ITEM_IDS.WOOD ? 0x8B4513 : (evt.item_id === BLE.ITEM_IDS.RADIO ? 0x3498db : 0x95a5a6));
+        this.splinterEmitter.emitParticleAt(item.x, item.y, 10);
+        item.sprite.destroy();
+        group.delete(evt.target_id);
+        
+        if (evt.player_id === multiplayerManager.playerId) {
+          this.cameras.main.shake(100, 0.005);
+          this.playSound('sfx_chop', { volume: 0.5 });
+          const labels = { 0: 'Wood', 1: 'Stone', 2: 'Radio' };
+          this.spawnFloatingText(`+1 ${labels[evt.item_id]}`, '#fff');
+        }
+      }
+    } else if (evt.evt_type === BLE.EVENT_TYPES.CRAFT) {
+      // Particles for craft
+      this.add.particles(evt.x, evt.y, 'smoke', {
+        speed: { min: 20, max: 40 }, angle: { min: 250, max: 290 },
+        scale: { start: 1, end: 3 }, alpha: { start: 0.5, end: 0 },
+        lifespan: 2000, frequency: 200, blendMode: 'ADD'
+      }).setDepth(50);
+      this.playSound('sfx_chop', { volume: 0.5 });
+    } else if (evt.evt_type === BLE.EVENT_TYPES.DAMAGE) {
+      if (evt.player_id === multiplayerManager.playerId) {
+        this.cameras.main.shake(200, 0.01);
+        this.spawnFloatingText('-5 HP', '#e74c3c');
+        const pObj = this.players[evt.player_id];
+        if (pObj) {
+          pObj.sprite.setTint(0xff0000);
+          this.time.delayedCall(200, () => pObj.sprite.clearTint());
+        }
+      }
+    } else if (evt.evt_type === BLE.EVENT_TYPES.WIN) {
+      if (!this.isWinning) {
+        const pObj = this.players[evt.player_id];
+        if (pObj) this.triggerWin(pObj.sprite);
+      }
+    }
+  }
+
+  triggerWin(playerSprite) {
+    this.isWinning = true;
+    this.isDead = true;
+    this.dustEmitter.emitting = false;
+    
+    this.cameras.main.pan(playerSprite.x, playerSprite.y, 1000, 'Sine.easeInOut');
+    
+    const heli = this.add.sprite(this.cameras.main.scrollX - 400, playerSprite.y - 150, 'helicopter').setDepth(200);
+    this.tweens.add({
+      targets: heli,
+      x: playerSprite.x + 800,
+      duration: 4000,
+      onComplete: () => this.game.events.emit('gameWon')
+    });
+  }
+
+  playSound(key, config) {
+    if (this.cache.audio.exists(key)) {
+      try { this.sound.play(key, config); } catch (e) {}
+    }
+  }
+
+  emitHUDUpdate() {
+    this.game.events.emit('updateHUD', { health: this.health, inventory: this.inventory });
+  }
+
+  spawnFloatingText(text, color) {
+    const pObj = this.players[multiplayerManager.playerId];
+    if (!pObj) return;
+    const floating = this.add.text(pObj.sprite.x, pObj.sprite.y - 30, text, {
+      fontSize: '20px', color: color, stroke: '#000', strokeThickness: 4, fontFamily: 'Silkscreen, monospace'
+    }).setOrigin(0.5).setDepth(200);
+    this.tweens.add({ targets: floating, y: pObj.sprite.y - 80, alpha: 0, duration: 1500, onComplete: () => floating.destroy() });
+  }
+
+  update(time, delta) {
+    if (this.isWinning) return;
 
     this.darknessLayer.clear();
     this.darknessLayer.draw('blackBg', 0, 0);
 
     const scrollX = this.cameras.main.scrollX;
     const scrollY = this.cameras.main.scrollY;
-
-    this.darknessLayer.erase('lightHole', this.player.x - scrollX - 150, this.player.y - scrollY - 150);
+    
+    const pObj = this.players[multiplayerManager.playerId];
+    if (pObj) {
+      this.darknessLayer.erase('lightHole', pObj.sprite.x - scrollX - 150, pObj.sprite.y - scrollY - 150);
+    }
     
     let closestFireDist = Infinity;
-    for (const fire of this.campfires.getChildren()) {
+    for (const [_, fire] of this.campfires) {
       const flicker = Math.random() * 4 - 2;
       this.darknessLayer.erase('lightHole', fire.x - scrollX - 150 + flicker, fire.y - scrollY - 150 + flicker);
-      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, fire.x, fire.y);
-      if (dist < closestFireDist) closestFireDist = dist;
+      if (pObj) {
+        const dist = Phaser.Math.Distance.Between(pObj.sprite.x, pObj.sprite.y, fire.x, fire.y);
+        if (dist < closestFireDist) closestFireDist = dist;
+      }
     }
     
     if (closestFireDist < 300) {
@@ -599,75 +415,68 @@ export default class GameScene extends Phaser.Scene {
       this.fireSound.volume = 0;
     }
 
-    this.player.body.setVelocity(0);
-    const speed = 400;
-    let isMoving = false;
+    if (this.isDead) return;
 
-    if (this.wasd.A.isDown && !this.isDead) {
-      this.player.body.setVelocityX(-speed);
-      this.player.anims.play('walk_left', true);
-      this.lastDirection = 'left';
-      isMoving = true;
-    } else if (this.wasd.D.isDown && !this.isDead) {
-      this.player.body.setVelocityX(speed);
-      this.player.anims.play('walk_right', true);
-      this.lastDirection = 'right';
-      isMoving = true;
+    // Build Input Packet
+    let joy_x = 0;
+    let joy_y = 0;
+    let flags = 0;
+    let target_id = 0;
+    let target_type = 0;
+
+    if (this.wasd.A.isDown) joy_x = -1;
+    else if (this.wasd.D.isDown) joy_x = 1;
+    if (this.wasd.W.isDown) joy_y = -1;
+    else if (this.wasd.S.isDown) joy_y = 1;
+
+    if (this.joystickData.x !== 0 || this.joystickData.y !== 0) {
+      joy_x = this.joystickData.x;
+      joy_y = this.joystickData.y;
     }
 
-    if (this.wasd.W.isDown && !this.isDead) {
-      this.player.body.setVelocityY(-speed);
-      this.player.anims.play('walk_up', true);
-      this.lastDirection = 'up';
-      isMoving = true;
-    } else if (this.wasd.S.isDown && !this.isDead) {
-      this.player.body.setVelocityY(speed);
-      this.player.anims.play('walk_down', true);
-      this.lastDirection = 'down';
-      isMoving = true;
-    }
-
-    if ((this.joystickData.x !== 0 || this.joystickData.y !== 0) && !this.isDead) {
-      this.player.body.setVelocityX(this.joystickData.x * speed);
-      this.player.body.setVelocityY(this.joystickData.y * speed);
-      isMoving = true;
-      if (Math.abs(this.joystickData.x) > Math.abs(this.joystickData.y)) {
-        if (this.joystickData.x < 0) {
-          this.player.anims.play('walk_left', true);
-          this.lastDirection = 'left';
-        } else {
-          this.player.anims.play('walk_right', true);
-          this.lastDirection = 'right';
-        }
-      } else {
-        if (this.joystickData.y < 0) {
-          this.player.anims.play('walk_up', true);
-          this.lastDirection = 'up';
-        } else {
-          this.player.anims.play('walk_down', true);
-          this.lastDirection = 'down';
-        }
-      }
-    }
-
-    if (!this.isDead) {
-      if (isMoving) {
-        this.dustEmitter.emitting = true;
-        if (!this.stepTimer || time > this.stepTimer) {
-          this.playSound('sfx_chop', { volume: 0.05, rate: 2 });
-          this.stepTimer = time + 250;
-        }
-      } else {
-        this.dustEmitter.emitting = false;
-        this.player.anims.play(`idle_${this.lastDirection}`, true);
-      }
+    // Chop logic - finding the nearest entity
+    if (Phaser.Input.Keyboard.JustDown(this.spaceKey) || this.chopRequested) {
+      flags |= BLE.INPUT_FLAGS.CHOP;
+      this.chopRequested = false;
       
-      // Emit player movement to server
-      if (this.socket) {
-        const currentAnim = this.player.anims.currentAnim ? this.player.anims.currentAnim.key : `idle_${this.lastDirection}`;
-        // Only send if changed position or animation significantly (throttling can be added later)
-        this.socket.emit('playerMove', { x: this.player.x, y: this.player.y, anim: currentAnim });
+      if (pObj) {
+        let minDist = 80; // Gather radius
+        let closest = null;
+        const checkGroup = (group, type) => {
+          for (const [id, item] of group) {
+            const dist = Phaser.Math.Distance.Between(pObj.sprite.x, pObj.sprite.y, item.x, item.y);
+            if (dist < minDist) {
+              minDist = dist;
+              closest = { id, type };
+            }
+          }
+        };
+        checkGroup(this.trees, BLE.ENTITY_TYPES.TREE);
+        checkGroup(this.rocks, BLE.ENTITY_TYPES.ROCK);
+        checkGroup(this.radios, BLE.ENTITY_TYPES.RADIO);
+        
+        if (closest) {
+          target_id = closest.id;
+          target_type = closest.type;
+        }
       }
     }
+
+    if (this.craftRequested) {
+      flags |= BLE.INPUT_FLAGS.CRAFT;
+      this.craftRequested = false;
+    }
+
+    // Queue input to multiplayerManager
+    // joy_x / joy_y need to be integers for the codec. Codec uses i16 but expects values?
+    // In HostSimulation: vx = input.joy_x * speed. Wait, does Codec scale them?
+    // Let's just send [-1, 1].
+    multiplayerManager.queueInput({
+      flags,
+      joy_x,
+      joy_y,
+      target_id,
+      target_type
+    });
   }
 }

@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import PhaserGame from './game/PhaserGame';
 import MobileControls from './components/MobileControls';
 import './index.css';
-import networkAdapter from './game/NetworkAdapter';
+import { multiplayerManager } from './multiplayer/MultiplayerManager';
 
 let audioCtx = null;
 
@@ -97,41 +97,32 @@ export default function App() {
   }, [fadeState, pendingState]);
 
   useEffect(() => {
-    setSocket(networkAdapter);
-
-    networkAdapter.on('roomJoined', (data) => {
-      setRoomData(data);
-      changeGameState('lobby');
-      setErrorMsg('');
-    });
-
-    networkAdapter.on('playerJoined', (player) => {
-      setRoomData(prev => ({ ...prev, players: [...prev.players, player] }));
-    });
-
-    networkAdapter.on('playerLeft', (id) => {
-      setRoomData(prev => ({ ...prev, players: prev.players.filter(p => p.id !== id) }));
-    });
-
-    networkAdapter.on('gameStarted', () => {
-      changeGameState('playing');
-    });
-
-    networkAdapter.on('error', (msg) => {
-      setErrorMsg(msg);
-      if (gameState === 'scanning') changeGameState('menu');
-      setTimeout(() => setErrorMsg(''), 3000);
-    });
-
-    networkAdapter.on('survivorFound', (data) => {
-      setFoundRoom(data);
-      changeGameState('found_survivor');
-    });
-
-    networkAdapter.on('scanFailed', (msg) => {
-      setErrorMsg(msg);
-      changeGameState('menu');
-      setTimeout(() => setErrorMsg(''), 3000);
+    multiplayerManager.setCallbacks({
+      onStateUpdate: (snap) => {
+        if (gameRef.current) {
+          gameRef.current.events.emit('stateUpdate', snap);
+        }
+      },
+      onEvent: (evt) => {
+        if (gameRef.current) {
+          gameRef.current.events.emit('networkEvent', evt);
+        }
+      },
+      onConnectionChange: (state) => {
+        if (state === 'connected') {
+          // Immediately enter playing state when fully connected via BLE
+          changeGameState('playing');
+        } else if (state === 'disconnected') {
+          setErrorMsg('Disconnected');
+          changeGameState('menu');
+          setTimeout(() => setErrorMsg(''), 3000);
+        }
+      },
+      onError: (err) => {
+        setErrorMsg(err.message || 'Network error');
+        if (gameState === 'scanning') changeGameState('menu');
+        setTimeout(() => setErrorMsg(''), 8000);
+      }
     });
 
     let index = 0;
@@ -146,7 +137,7 @@ export default function App() {
     
     return () => {
       clearInterval(interval);
-      networkAdapter.disconnect();
+      multiplayerManager.disconnect();
     };
   }, []);
 
@@ -239,32 +230,57 @@ export default function App() {
     }
   };
 
-  const handleCreateRoom = () => {
-    if (socket && playerName.trim()) {
-      socket.emit('createRoom', { playerName: playerName.trim() });
+  const handleCreateRoom = async () => {
+    if (playerName.trim()) {
+      try {
+        await multiplayerManager.host();
+        setRoomData({ players: [{ id: 'host', name: playerName.trim(), isHost: true }], isHost: true, myId: 'host' });
+        changeGameState('lobby');
+      } catch (e) {
+        setErrorMsg(e.message);
+      }
     } else {
       setErrorMsg('Please enter a name first');
     }
   };
 
-  const handleScanLocal = () => {
-    if (socket && playerName.trim()) {
+  const handleScanLocal = async () => {
+    if (playerName.trim()) {
       changeGameState('scanning');
-      socket.emit('scanLocal');
+      try {
+        const device = await multiplayerManager.scan();
+        if (device) {
+          setFoundRoom({ hostName: device.name, deviceId: device.device_id || device.deviceId });
+          changeGameState('found_survivor');
+        } else {
+          setErrorMsg('No survivor found');
+          changeGameState('menu');
+        }
+      } catch (e) {
+        setErrorMsg(e.message || 'Scan failed');
+        changeGameState('menu');
+      }
     } else {
       setErrorMsg('Please enter a name first');
     }
   };
 
-  const handleJoinRoom = () => {
-    if (socket && foundRoom.roomCode) {
-      socket.emit('joinRoom', { roomCode: foundRoom.roomCode, playerName: playerName.trim() });
+  const handleJoinRoom = async () => {
+    if (foundRoom.deviceId) {
+      try {
+        await multiplayerManager.connect(foundRoom.deviceId);
+      } catch (e) {
+        setErrorMsg(e.message);
+        changeGameState('menu');
+      }
     }
   };
 
   const handleStartGame = () => {
-    if (socket && roomData.isHost) {
-      socket.emit('startGame');
+    if (roomData.isHost) {
+      changeGameState('playing');
+      // For testing cross-tab, the host just transitions to playing.
+      // The client will transition on 'connected'
     }
   };
 
@@ -276,7 +292,24 @@ export default function App() {
           <div style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '30px' }}>
             <h1 className="glitch-title" data-text="AIRCADE: SURVIVAL" style={{ marginBottom: '10px' }}>AIRCADE: SURVIVAL</h1>
             
-            {errorMsg && <div style={{ color: 'var(--color-red)', background: '#000', padding: '10px', border: '2px solid var(--color-red)', fontSize: '20px', boxShadow: '0 0 10px var(--color-red-glow)' }}>{errorMsg}</div>}
+            {errorMsg && (
+              <div style={{ 
+                color: '#fff', 
+                background: '#d32f2f', 
+                padding: '20px', 
+                borderRadius: '8px',
+                border: '4px solid #fff', 
+                fontSize: '24px', 
+                fontWeight: 'bold',
+                boxShadow: '0 0 20px rgba(255,0,0,0.8)',
+                maxWidth: '90%',
+                wordWrap: 'break-word',
+                textAlign: 'center',
+                zIndex: 999
+              }}>
+                ERROR: {errorMsg}
+              </div>
+            )}
             
             <div className="retro-box" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '40px', minWidth: '500px' }}>
               <input 
