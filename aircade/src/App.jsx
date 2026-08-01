@@ -2,16 +2,161 @@ import { useRef, useState, useEffect } from 'react';
 import PhaserGame from './game/PhaserGame';
 import MobileControls from './components/MobileControls';
 import './index.css';
+import networkAdapter from './game/NetworkAdapter';
+
+let audioCtx = null;
+
+const initAudio = () => {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+};
+
+const playBlip = () => {
+  try {
+    initAudio();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.05);
+    
+    gain.gain.setValueAtTime(0, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.1, audioCtx.currentTime + 0.01);
+    gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.05);
+  } catch (e) {
+    console.error(e);
+  }
+};
+
+const playSelect = () => {
+  try {
+    initAudio();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1);
+    
+    gain.gain.setValueAtTime(0, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + 0.02);
+    gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.1);
+  } catch (e) {
+    console.error(e);
+  }
+};
 
 export default function App() {
   const gameRef = useRef(null);
-  const [gameState, setGameState] = useState('menu'); // 'menu' | 'playing' | 'gameover' | 'win' | 'hosting' | 'scanning' | 'found_survivor'
+  const [gameState, setGameState] = useState('menu');
   const [hudState, setHudState] = useState({ health: 100, inventory: { Wood: 0, Stone: 0, Radio: 0 } });
+  const [isShivering, setIsShivering] = useState(false);
   const [tutorialState, setTutorialState] = useState('visible');
   const [day, setDay] = useState(1);
   const [dayFlash, setDayFlash] = useState(false);
-  const isTouch = navigator.maxTouchPoints > 0;
-  const isMobile = window.innerWidth < 768;
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768 || 'ontouchstart' in window);
+  const [typedTutorial, setTypedTutorial] = useState('');
+  
+  const [socket, setSocket] = useState(null);
+  const [playerName, setPlayerName] = useState('');
+  const [roomData, setRoomData] = useState({ roomCode: '', players: [], isHost: false, myId: '' });
+  const [foundRoom, setFoundRoom] = useState({ roomCode: '', hostName: '' });
+  const [errorMsg, setErrorMsg] = useState('');
+  
+  const [fadeState, setFadeState] = useState('fade-in');
+  const [pendingState, setPendingState] = useState(null);
+  const tutorialLines = "WASD to move | SPACE to gather\n\nBuild campfires to survive the night\n\nFind 3 Radio Parts to escape";
+
+  const changeGameState = (newState) => {
+    setFadeState('fade-out');
+    setPendingState(newState);
+  };
+
+  useEffect(() => {
+    if (fadeState === 'fade-out' && pendingState) {
+      const timer = setTimeout(() => {
+        setGameState(pendingState);
+        setPendingState(null);
+        setFadeState('fade-in');
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [fadeState, pendingState]);
+
+  useEffect(() => {
+    setSocket(networkAdapter);
+
+    networkAdapter.on('roomJoined', (data) => {
+      setRoomData(data);
+      changeGameState('lobby');
+      setErrorMsg('');
+    });
+
+    networkAdapter.on('playerJoined', (player) => {
+      setRoomData(prev => ({ ...prev, players: [...prev.players, player] }));
+    });
+
+    networkAdapter.on('playerLeft', (id) => {
+      setRoomData(prev => ({ ...prev, players: prev.players.filter(p => p.id !== id) }));
+    });
+
+    networkAdapter.on('gameStarted', () => {
+      changeGameState('playing');
+    });
+
+    networkAdapter.on('error', (msg) => {
+      setErrorMsg(msg);
+      if (gameState === 'scanning') changeGameState('menu');
+      setTimeout(() => setErrorMsg(''), 3000);
+    });
+
+    networkAdapter.on('survivorFound', (data) => {
+      setFoundRoom(data);
+      changeGameState('found_survivor');
+    });
+
+    networkAdapter.on('scanFailed', (msg) => {
+      setErrorMsg(msg);
+      changeGameState('menu');
+      setTimeout(() => setErrorMsg(''), 3000);
+    });
+
+    let index = 0;
+    const interval = setInterval(() => {
+      if (index <= tutorialLines.length) {
+        setTypedTutorial(tutorialLines.slice(0, index));
+        index++;
+      } else {
+        clearInterval(interval);
+      }
+    }, 50);
+    
+    return () => {
+      clearInterval(interval);
+      networkAdapter.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (gameState === 'playing' && tutorialState === 'visible') {
@@ -29,7 +174,13 @@ export default function App() {
     if (gameState !== 'playing') return;
 
     const handleUpdateHUD = (data) => {
-      setHudState(data);
+      setHudState(prev => {
+        if (data.health < prev.health) {
+          setIsShivering(true);
+          setTimeout(() => setIsShivering(false), 500);
+        }
+        return data;
+      });
     };
 
     const handleGameOver = () => {
@@ -46,23 +197,26 @@ export default function App() {
       setTimeout(() => setDayFlash(false), 2000);
     };
 
+    let gameInstance = null;
+
     const checkGame = setInterval(() => {
       if (gameRef.current) {
-        gameRef.current.events.on('updateHUD', handleUpdateHUD);
-        gameRef.current.events.on('gameOver', handleGameOver);
-        gameRef.current.events.on('gameWon', handleGameWon);
-        gameRef.current.events.on('newDay', handleNewDay);
+        gameInstance = gameRef.current;
+        gameInstance.events.on('updateHUD', handleUpdateHUD);
+        gameInstance.events.on('gameOver', handleGameOver);
+        gameInstance.events.on('gameWon', handleGameWon);
+        gameInstance.events.on('newDay', handleNewDay);
         clearInterval(checkGame);
       }
     }, 100);
 
     return () => {
       clearInterval(checkGame);
-      if (gameRef.current) {
-        gameRef.current.events.off('updateHUD', handleUpdateHUD);
-        gameRef.current.events.off('gameOver', handleGameOver);
-        gameRef.current.events.off('gameWon', handleGameWon);
-        gameRef.current.events.off('newDay', handleNewDay);
+      if (gameInstance) {
+        gameInstance.events.off('updateHUD', handleUpdateHUD);
+        gameInstance.events.off('gameOver', handleGameOver);
+        gameInstance.events.off('gameWon', handleGameWon);
+        gameInstance.events.off('newDay', handleNewDay);
       }
     };
   }, [gameState]);
@@ -85,89 +239,186 @@ export default function App() {
     }
   };
 
+  const handleCreateRoom = () => {
+    if (socket && playerName.trim()) {
+      socket.emit('createRoom', { playerName: playerName.trim() });
+    } else {
+      setErrorMsg('Please enter a name first');
+    }
+  };
+
+  const handleScanLocal = () => {
+    if (socket && playerName.trim()) {
+      changeGameState('scanning');
+      socket.emit('scanLocal');
+    } else {
+      setErrorMsg('Please enter a name first');
+    }
+  };
+
+  const handleJoinRoom = () => {
+    if (socket && foundRoom.roomCode) {
+      socket.emit('joinRoom', { roomCode: foundRoom.roomCode, playerName: playerName.trim() });
+    }
+  };
+
+  const handleStartGame = () => {
+    if (socket && roomData.isHost) {
+      socket.emit('startGame');
+    }
+  };
+
   if (gameState === 'menu') {
     return (
-      <div style={{ width: '100vw', height: '100vh', backgroundImage: 'url(/menu_bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 1 }}></div>
-        <div style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
-          <h1 style={{ fontSize: '4rem', marginBottom: '1rem', textAlign: 'center', color: 'white', textShadow: '0 0 20px rgba(0,0,0,0.8)' }}>AIRCADE: SURVIVAL</h1>
-          <button 
-            className="retro-button"
-            onClick={() => setGameState('hosting')}
-            style={{ fontSize: '24px', background: '#2ecc71', color: 'white', width: '400px' }}
-          >
-            BROADCAST (HOST)
-          </button>
-          <button 
-            className="retro-button"
-            onClick={() => setGameState('scanning')}
-            style={{ fontSize: '24px', background: '#3498db', color: 'white', width: '400px' }}
-          >
-            SCAN (JOIN)
-          </button>
-        </div>
-      </div>
-    );
-  }
+      <div className={`fade-wrapper ${fadeState}`}>
+        <div className="pan-bg" style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.3)', zIndex: 1 }}></div>
+          <div style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '30px' }}>
+            <h1 className="glitch-title" data-text="AIRCADE: SURVIVAL" style={{ marginBottom: '10px' }}>AIRCADE: SURVIVAL</h1>
+            
+            {errorMsg && <div style={{ color: 'var(--color-red)', background: '#000', padding: '10px', border: '2px solid var(--color-red)', fontSize: '20px', boxShadow: '0 0 10px var(--color-red-glow)' }}>{errorMsg}</div>}
+            
+            <div className="retro-box" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '40px', minWidth: '500px' }}>
+              <input 
+                type="text" 
+                className="retro-input"
+                placeholder="ENTER PLAYER NAME" 
+                maxLength={12}
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value.toUpperCase())}
+                style={{ width: '100%', boxSizing: 'border-box', marginBottom: '10px' }}
+              />
 
-  if (gameState === 'hosting') {
-    return (
-      <div style={{ width: '100vw', height: '100vh', backgroundImage: 'url(/menu_bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 1 }}></div>
-        <div className="retro-box" style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '40px' }}>
-          <h2 style={{ fontSize: '2rem', textAlign: 'center', margin: 0 }}>BROADCASTING BLE SIGNAL...</h2>
-          <div style={{ width: '100px', height: '100px', borderRadius: '50%', background: '#3498db', animation: 'circlePulse 1.5s infinite' }}></div>
-          <button 
-            className="retro-button"
-            onClick={() => setGameState('playing')}
-            style={{ fontSize: '24px', background: '#e67e22', color: 'white', marginTop: '20px' }}
-          >
-            START SOLO
-          </button>
+              <div style={{ display: 'flex', gap: '20px', width: '100%' }}>
+                <button 
+                  className="chunky-button host-btn"
+                  onMouseEnter={playBlip}
+                  onClick={() => { playSelect(); handleCreateRoom(); }}
+                  style={{ flex: 1, padding: '20px 0' }}
+                >
+                  HOST
+                </button>
+                <button 
+                  className="chunky-button join-btn"
+                  onMouseEnter={playBlip}
+                  onClick={() => { playSelect(); handleScanLocal(); }}
+                  style={{ flex: 1, padding: '20px 0' }}
+                >
+                  JOIN
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-        <style>{`
-          @keyframes circlePulse {
-            0% { transform: scale(0.8); opacity: 0.5; }
-            50% { transform: scale(1.2); opacity: 1; }
-            100% { transform: scale(0.8); opacity: 0.5; }
-          }
-        `}</style>
       </div>
     );
   }
 
   if (gameState === 'scanning') {
     return (
-      <div style={{ width: '100vw', height: '100vh', backgroundImage: 'url(/menu_bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 1 }}></div>
-        <div className="retro-box" style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '40px' }}>
-          <h2 style={{ fontSize: '2rem', textAlign: 'center', margin: 0 }}>SCANNING LOCAL AREA...</h2>
-          <div style={{ width: '100px', height: '100px', borderRadius: '50%', background: '#e74c3c', animation: 'circlePulse 1.5s infinite' }}></div>
+      <div className={`fade-wrapper ${fadeState}`}>
+        <div className="pan-bg" style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.3)', zIndex: 1 }}></div>
+          <div className="retro-box" style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '40px' }}>
+            <h2 style={{ fontSize: '2rem', textAlign: 'center', margin: 0, color: 'var(--color-red)' }}>SCANNING LOCAL AREA...</h2>
+            <div style={{ width: '100px', height: '100px', borderRadius: '50%', background: 'var(--color-red)', animation: 'circlePulse 1.5s infinite', boxShadow: '0 0 20px var(--color-red)' }}></div>
+            <button 
+              className="retro-button"
+              onMouseEnter={playBlip}
+              onClick={() => { playSelect(); changeGameState('menu'); }}
+              style={{ fontSize: '20px', marginTop: '20px' }}
+            >
+              CANCEL
+            </button>
+          </div>
+          <style>{`
+            @keyframes circlePulse {
+              0% { transform: scale(0.8); opacity: 0.5; }
+              50% { transform: scale(1.2); opacity: 1; }
+              100% { transform: scale(0.8); opacity: 0.5; }
+            }
+          `}</style>
         </div>
-        <style>{`
-          @keyframes circlePulse {
-            0% { transform: scale(0.8); opacity: 0.5; }
-            50% { transform: scale(1.2); opacity: 1; }
-            100% { transform: scale(0.8); opacity: 0.5; }
-          }
-        `}</style>
       </div>
     );
   }
 
   if (gameState === 'found_survivor') {
     return (
-      <div style={{ width: '100vw', height: '100vh', backgroundImage: 'url(/menu_bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 1 }}></div>
-        <div className="retro-box" style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '40px' }}>
-          <h2 style={{ fontSize: '2rem', textAlign: 'center', margin: 0 }}>SURVIVOR FOUND: PLAYER 1</h2>
-          <button 
-            className="retro-button"
-            onClick={() => setGameState('playing')}
-            style={{ fontSize: '24px', background: '#2ecc71', color: 'white', marginTop: '20px' }}
-          >
-            CONNECT VIA BLUETOOTH
-          </button>
+      <div className={`fade-wrapper ${fadeState}`}>
+        <div className="pan-bg" style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.3)', zIndex: 1 }}></div>
+          <div className="retro-box" style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '40px' }}>
+            <h2 style={{ fontSize: '2rem', textAlign: 'center', margin: 0, color: 'var(--color-text)' }}>SURVIVOR FOUND:<br/><span style={{color: 'var(--color-green)'}}>{foundRoom.hostName}</span></h2>
+            <button 
+              className="chunky-button join-btn"
+              onMouseEnter={playBlip}
+              onClick={() => { playSelect(); handleJoinRoom(); }}
+              style={{ marginTop: '20px' }}
+            >
+              CONNECT VIA BLUETOOTH
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameState === 'lobby') {
+    return (
+      <div className={`fade-wrapper ${fadeState}`}>
+        <div className="pan-bg" style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.3)', zIndex: 1 }}></div>
+          <div className="retro-box" style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '40px', minWidth: '400px' }}>
+            
+            <h2 style={{ fontSize: '2rem', textAlign: 'center', margin: 0, color: roomData.isHost ? 'var(--color-amber)' : 'var(--color-green)' }}>
+              {roomData.isHost ? 'BROADCASTING BLE SIGNAL...' : 'CONNECTED TO BLE SIGNAL'}
+            </h2>
+            {roomData.isHost && (
+              <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'var(--color-amber)', animation: 'circlePulse 1.5s infinite', boxShadow: '0 0 20px var(--color-amber)' }}></div>
+            )}
+            
+            <div style={{ width: '100%', borderTop: '4px solid var(--color-border)', margin: '10px 0' }}></div>
+            <h3 style={{ fontSize: '1.5rem', color: '#555', margin: 0 }}>SURVIVORS CONNECTED</h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', width: '100%' }}>
+              {roomData.players.map((p, i) => (
+                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '24px', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '10px', borderLeft: p.isHost ? '4px solid var(--color-amber)' : '4px solid var(--color-green)' }}>
+                  <span>P{i+1}: {p.name} {p.id === roomData.myId ? '(YOU)' : ''}</span>
+                  <span style={{ color: p.isHost ? 'var(--color-amber)' : 'var(--color-green)', fontSize: '16px', animation: 'blink 2s infinite' }}>[READY]</span>
+                </div>
+              ))}
+              {[...Array(4 - roomData.players.length)].map((_, i) => (
+                <div key={`empty-${i}`} style={{ fontSize: '24px', color: '#333', padding: '10px' }}>[NO SIGNAL]</div>
+              ))}
+            </div>
+
+            <div style={{ width: '100%', borderTop: '4px solid var(--color-border)', margin: '10px 0' }}></div>
+
+            {roomData.isHost ? (
+              <button 
+                className="chunky-button host-btn"
+                onMouseEnter={playBlip}
+                onClick={() => { playSelect(); handleStartGame(); }}
+                style={{ width: '100%', marginTop: '10px' }}
+              >
+                START GAME
+              </button>
+            ) : (
+              <div style={{ fontSize: '20px', color: '#555', marginTop: '20px', animation: 'blink 1.5s infinite' }}>WAITING FOR HOST TO START...</div>
+            )}
+          </div>
+          <style>{`
+            @keyframes circlePulse {
+              0% { transform: scale(0.8); opacity: 0.5; }
+              50% { transform: scale(1.2); opacity: 1; }
+              100% { transform: scale(0.8); opacity: 0.5; }
+            }
+            @keyframes blink {
+              0%, 100% { opacity: 1; }
+              50% { opacity: 0.3; }
+            }
+          `}</style>
         </div>
       </div>
     );
@@ -175,11 +426,13 @@ export default function App() {
 
   if (gameState === 'gameover') {
     return (
-      <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: '#ff0000', color: '#fff' }}>
+      <div className={`fade-wrapper ${fadeState}`} style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: '#ff0000', color: '#fff' }}>
         <h1 style={{ fontSize: '4rem', marginBottom: '2rem', textAlign: 'center' }}>YOU FROZE TO DEATH</h1>
         <button 
           className="retro-button"
+          onMouseEnter={playBlip}
           onClick={() => {
+            playSelect();
             if (gameRef.current) gameRef.current.events.emit('restartGame');
             setDay(1);
             setGameState('playing');
@@ -216,35 +469,41 @@ export default function App() {
   const canCraft = inventory.Wood >= 2 && inventory.Stone >= 1;
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: 10, left: 0, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', zIndex: 20 }}>
-        {/* Visual Health Bar */}
-        <div style={{ width: '300px', height: '24px', background: '#000', border: '4px solid #fff', position: 'relative' }}>
+    <div className={`fade-wrapper ${fadeState}`} style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+      <div className="crt-overlay"></div>
+      <div className="crt-vignette"></div>
+      {/* Split HUD - Left */}
+      <div className={isShivering ? 'shiver' : ''} style={{ position: 'absolute', top: isMobile ? 10 : 20, left: isMobile ? 10 : 20, display: 'flex', flexDirection: 'column', gap: isMobile ? '5px' : '10px', zIndex: 20 }}>
+        <div className={`retro-box ${dayFlash ? 'day-flash' : ''}`} style={{ padding: isMobile ? '5px 10px' : '10px 20px', fontSize: isMobile ? '16px' : '24px', textAlign: 'center' }}>
+          DAY {day}
+        </div>
+        <div className={health < 30 ? 'heartbeat' : ''} style={{ width: isMobile ? '120px' : '200px', height: isMobile ? '16px' : '24px', background: '#000', border: isMobile ? '2px solid #fff' : '4px solid #fff', position: 'relative' }}>
            <div style={{ width: `${health}%`, height: '100%', background: '#e74c3c', transition: 'width 0.3s' }} />
         </div>
+      </div>
 
-        {/* Hotbar Slots */}
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <div className="retro-box" style={{ width: '60px', height: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <img src="/icon_wood.png" width="24" alt="Wood" />
-            <span>{inventory.Wood}</span>
-          </div>
-          <div className="retro-box" style={{ width: '60px', height: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <img src="/icon_stone.png" width="24" alt="Stone" />
-            <span>{inventory.Stone}</span>
-          </div>
-          <div className="retro-box" style={{ width: '60px', height: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <img src="/radio_part.png" width="24" alt="Radio" />
-            <span>{inventory.Radio}/3</span>
-          </div>
-          <div className="retro-box" 
-               onClick={handleCraftCampfire}
-               style={{ width: '60px', height: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: canCraft ? '#e67e22' : '#333', cursor: canCraft ? 'pointer' : 'not-allowed' }}>
-            🔥<span style={{ fontSize: '10px' }}>CRAFT</span>
-          </div>
+      {/* Split HUD - Right */}
+      <div className={isShivering ? 'shiver' : ''} style={{ position: 'absolute', top: isMobile ? 10 : 20, right: isMobile ? 10 : 20, display: 'flex', gap: isMobile ? '5px' : '10px', zIndex: 20 }}>
+        <div className="retro-box" style={{ width: isMobile ? '40px' : '60px', height: isMobile ? '40px' : '60px', padding: isMobile ? '5px' : '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? '10px' : '16px' }}>
+          <img src="/icon_wood.png" width={isMobile ? "16" : "24"} alt="Wood" />
+          <span>{inventory.Wood}</span>
+        </div>
+        <div className="retro-box" style={{ width: isMobile ? '40px' : '60px', height: isMobile ? '40px' : '60px', padding: isMobile ? '5px' : '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? '10px' : '16px' }}>
+          <img src="/icon_stone.png" width={isMobile ? "16" : "24"} alt="Stone" />
+          <span>{inventory.Stone}</span>
+        </div>
+        <div className="retro-box" style={{ width: isMobile ? '40px' : '60px', height: isMobile ? '40px' : '60px', padding: isMobile ? '5px' : '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? '10px' : '16px' }}>
+          <img src="/radio_part.png" width={isMobile ? "16" : "24"} alt="Radio" />
+          <span>{inventory.Radio}/3</span>
+        </div>
+        <div className="retro-box" 
+             onClick={handleCraftCampfire}
+             style={{ width: isMobile ? '40px' : '60px', height: isMobile ? '40px' : '60px', padding: isMobile ? '5px' : '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: canCraft ? '#e67e22' : '#333', cursor: canCraft ? 'pointer' : 'not-allowed', fontSize: isMobile ? '8px' : '10px' }}>
+          <span style={{ fontSize: isMobile ? '14px' : '16px' }}>🔥</span><span>CRAFT</span>
         </div>
       </div>
       
+      {isShivering && <div className="damage-flash-ui"></div>}
       {health < 30 && (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 15, pointerEvents: 'none', animation: 'pulseRed 0.5s infinite alternate' }}></div>
       )}
@@ -261,13 +520,7 @@ export default function App() {
         }
       `}</style>
 
-      {/* Day Counter */}
-      <div className={`retro-box ${dayFlash ? 'day-flash' : ''}`} style={{
-        position: 'absolute', top: isMobile ? '5px' : '20px', right: isMobile ? '5px' : '20px', zIndex: 20,
-        fontSize: isMobile ? '16px' : '24px', transition: 'all 0.3s'
-      }}>
-        DAY {day}
-      </div>
+
 
       {tutorialState !== 'hidden' && (
         <div className="retro-box" style={{ 
@@ -277,16 +530,16 @@ export default function App() {
           transition: 'opacity 1s ease-in-out',
           fontSize: isMobile ? '12px' : '20px'
         }}>
-          WASD to move | SPACE to gather<br/><br/>
-          Build campfires to survive the night<br/><br/>
-          Find 3 Radio Parts to escape
+          {typedTutorial.split('\n').map((line, i) => (
+            <span key={i}>{line}<br/></span>
+          ))}
         </div>
       )}
       
-      <PhaserGame gameRef={gameRef} />
+      <PhaserGame gameRef={gameRef} socket={socket} roomData={roomData} />
       
-      {isTouch && <MobileControls onMove={handleJoystickMove} onStop={handleJoystickStop} onChop={handleChop} />}
-      {!isTouch && (
+      {isMobile && <MobileControls onMove={handleJoystickMove} onStop={handleJoystickStop} onChop={handleChop} />}
+      {!isMobile && (
         <button 
           className="retro-button"
           onClick={handleChop}
