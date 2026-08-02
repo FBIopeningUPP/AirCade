@@ -100,7 +100,7 @@ export default class GameScene extends Phaser.Scene {
       lifespan: 300,
       frequency: 100,
       emitting: false
-    }).setDepth(10);
+    }).setDepth(10005);
 
     this.splinterEmitter = this.add.particles(0, 0, 'dust', {
       speed: { min: 50, max: 150 },
@@ -156,9 +156,7 @@ export default class GameScene extends Phaser.Scene {
     holeGraphics.generateTexture('lightHole', 300, 300);
     holeGraphics.destroy();
 
-    // blackBg texture removed to prevent WebGL crash on mobile
-
-    this.darknessLayer = this.add.renderTexture(0, 0, this.scale.width, this.scale.height).setDepth(100).setAlpha(0).setScrollFactor(0);
+    this.darknessLayer = this.add.renderTexture(0, 0, this.scale.width, this.scale.height).setDepth(10000).setAlpha(0).setScrollFactor(0);
 
     const dummySound = { volume: 0, play: () => {}, destroy: () => {} };
     try {
@@ -296,7 +294,7 @@ export default class GameScene extends Phaser.Scene {
         const sprite = this.add.sprite(p.x, p.y, 'player').setDisplaySize(48, 48);
         const nameText = this.add.text(p.x, p.y - 30, `P${p.id}`, {
           fontSize: '12px', color: '#fff', stroke: '#000', strokeThickness: 3, fontFamily: 'Silkscreen, monospace'
-        }).setOrigin(0.5).setDepth(200);
+        }).setOrigin(0.5).setDepth(20000);
         playerObj = { id: p.id, sprite, nameText, lastDirection: 'down' };
         this.players[p.id] = playerObj;
       }
@@ -351,17 +349,26 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Process campfires (snap.campfires doesn't have IDs, just active positions)
-    // We recreate them every tick for simplicity in the mock.
-    for (const [_, cf] of this.campfires) cf.sprite.destroy();
-    this.campfires.clear();
+    // Process campfires persistently
+    const activeCampfireKeys = new Set();
     
-    snap.campfires.forEach((c, idx) => {
+    snap.campfires.forEach((c) => {
       if (c.active) {
-        const sprite = this.add.image(c.x, c.y, 'campfire').setDisplaySize(48, 48).setDepth(c.y);
-        this.campfires.set(idx, { x: c.x, y: c.y, sprite });
+        const key = `${c.x},${c.y}`;
+        activeCampfireKeys.add(key);
+        if (!this.campfires.has(key)) {
+          const sprite = this.add.image(c.x, c.y, 'campfire').setDisplaySize(48, 48).setDepth(c.y);
+          this.campfires.set(key, { x: c.x, y: c.y, sprite });
+        }
       }
     });
+
+    for (const [key, cf] of this.campfires) {
+      if (!activeCampfireKeys.has(key)) {
+        cf.sprite.destroy();
+        this.campfires.delete(key);
+      }
+    }
   }
 
   onNetworkEvent(evt) {
@@ -418,7 +425,7 @@ export default class GameScene extends Phaser.Scene {
     
     this.cameras.main.pan(playerSprite.x, playerSprite.y, 1000, 'Sine.easeInOut');
     
-    const heli = this.add.sprite(this.cameras.main.scrollX - 400, playerSprite.y - 150, 'helicopter').setDepth(200);
+    const heli = this.add.sprite(this.cameras.main.scrollX - 400, playerSprite.y - 150, 'helicopter').setDepth(20000);
     this.tweens.add({
       targets: heli,
       x: playerSprite.x + 800,
@@ -442,7 +449,7 @@ export default class GameScene extends Phaser.Scene {
     if (!pObj) return;
     const floating = this.add.text(pObj.sprite.x, pObj.sprite.y - 30, text, {
       fontSize: '20px', color: color, stroke: '#000', strokeThickness: 4, fontFamily: 'Silkscreen, monospace'
-    }).setOrigin(0.5).setDepth(200);
+    }).setOrigin(0.5).setDepth(20000);
     this.tweens.add({ targets: floating, y: pObj.sprite.y - 80, alpha: 0, duration: 1500, onComplete: () => floating.destroy() });
   }
 

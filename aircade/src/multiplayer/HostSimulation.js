@@ -218,13 +218,13 @@ export class HostSimulation {
       pos.y += vel.vy * (this.tickMs / 1000);
       
       const checkCollision = (group, radius) => {
+        const p_r = 15;
         for (const item of group.values()) {
           if (!item.active) continue;
-          const cf_r = 20;
           const dy_offset = item.type === this.entityTypes.TREE ? 30 : 0;
           const dx = pos.x - item.x;
           const dy = pos.y - (item.y + dy_offset);
-          const min_dist = (cf_r + p_r) * 0.9;
+          const min_dist = (radius + p_r) * 0.9;
           const dist = Math.hypot(dx, dy);
           if (dist < min_dist) {
             const push = min_dist - dist;

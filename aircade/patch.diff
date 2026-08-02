@@ -1,0 +1,3186 @@
+﻿diff --git a/.DS_Store b/.DS_Store
+new file mode 100644
+index 0000000..07f0c63
+Binary files /dev/null and b/.DS_Store differ
+diff --git a/Aircade Development Roadmap.pdf b/Aircade Development Roadmap.pdf
+new file mode 100644
+index 0000000..60cc341
+--- /dev/null
++++ b/Aircade Development Roadmap.pdf	
+@@ -0,0 +1,375 @@
++Aircade Development Roadmap
++
++Executive Summary
++
++Aircade is a retro-style 2D pixel-art survival adventure designed for offline play. In the game, the player
++survives a plane crash and must scavenge wreckage, manage health/hunger/thirst/stamina, craft tools,
++and overcome environmental hazards to escape. The game features a clear narrative (e.g. find water,
++build a shelter, repair a radio, activate a rescue beacon) rather than endless survival, ensuring each
++objective advances the story. As an offline-first title, all single-player content requires no internet
++(ideal for flights, trains, remote areas)πÇÉ20ΓÇáL124-L133πÇæ. Crucially, Aircade supports local Bluetooth
++P2P multiplayer: nearby devices connect directly (Host-Client model) without Wi-Fi, letting friends
++cooperatively or competitively survive together. This dual focus ΓÇô a polished offline solo experience plus
++seamless Bluetooth-based local multiplayer ΓÇô makes Aircade uniquely suited for travel and offline
++scenarios while keeping development fully free/open-source.
++
++Technology Comparison
++
++Game Engines Comparison
++
++Engine    Primary Language(s) Platforms                         License     Initial
++                                                                            Release
++Phaser 3  JavaScript / TypeScript  Web (HTML5/Browser); can     MIT πÇÉ2ΓÇáL7-
++          πÇÉ1ΓÇáL93-L100πÇæ             package to Android/iOS (via  L10πÇæ        2013
++Godot 4                            Cordova/Electron)
++                                                                MIT πÇÉ2ΓÇáL7-  2014
++GDevelop  GDScript (Python-like),  Desktop (Windows/Linux/      L10πÇæ        (public
++5         C#, C++πÇÉ1ΓÇáL100-          macOS), Mobile (Android/                 2018)
++          L107πÇæ                    iOS), WebGL, consoles        MIT
++                                                                πÇÉ7ΓÇáL330-    2013
++          JS/TypeScript/C++        Desktop (Windows/macOS/      L338πÇæ
++          (engine)πÇÉ22ΓÇáL68-         Linux), Web (HTML5), Mobile
++          L74πÇæ                     (Android/iOS)
++
++ΓÇó Languages: Phaser games are coded in JS/TSπÇÉ1ΓÇáL93-L100πÇæ, Godot uses its built-in GDScript or
++ C#/C++, and GDevelopΓÇÖs engine core uses JS/TS/C++πÇÉ22ΓÇáL68-L74πÇæ.
++
++ΓÇó Platforms: All engines can target mobile and web. Godot and GDevelop have built-in export
++ tools to Android APK, iOS (via Xcode), HTML5/WebGL, plus desktop builds. Phaser is browser-
++ native (zero install) and can be wrapped for Android/iOS via Cordova or Electron.
++
++ΓÇó License: Each engine is fully open-source (MIT licence)πÇÉ2ΓÇáL7-L10πÇæπÇÉ7ΓÇáL330-L338πÇæ, with no
++ royalties or fees.
++
++ΓÇó Editor: Godot offers a complete IDE (scene editor, debugger, profiler); Phaser is code-first (you
++ use external code editors); GDevelop is an event-based visual editor.
++
++ΓÇó Maturity: All are mature, widely-used engines (Godot >10 years, Phaser since 2013, GDevelop
++ since ~2013), with active communities and extensive documentation.
++
++                                   1
++Bluetooth P2P Libraries/Plugins
++
++Library / API                                    Platforms                                             License                                                           Maturity / Notes
++
++Web Bluetooth API                                Modern                                                Web Standard                                                      Limited support (no Safari/iOS).
++                                                 browsers                                              (open)                                                            Designed for BLE device access,
++                                                 (Chrome/Edge on                                                                                                         not for browser-to-browser
++                                                 desktop &                                                                                                               multiplayerπÇÉ13ΓÇáL25-L28πÇæ.
++                                                 Android)
++
++Cordova Bluetooth LE                             Android, iOS (via                                     Apache-2.0                                                        Mature, widely-used plugin for
++                                                 Cordova/                                              πÇÉ35ΓÇáL416-                                                         BLE. Works with any HTML5
++                                                 Capacitor)                                            L424πÇæ                                                             engine (Phaser/GDevelop).
++
++React Native BLE PLX Android, iOS                                                                      Apache-2.0                                                        Well-maintained React Native
++                                                                                                       πÇÉ39ΓÇáL259-                                                         library (not directly used here,
++                                                                                                       L262πÇæ                                                             but representative of mature BLE
++                                                                                                                                                                         libs). Supports central/peripheral
++                                                                                                                                                                         roles.
++
++                                       Android devices                                                 Apache-2.0                                                        Native Android SDK (Classic and
++Android Bluetooth API                                                                                  (built-in)                                                        BLE); full support for P2P sockets.
++
++                                       ( Java/Kotlin)
++
++MultipeerConnectivity                            iOS (Apple                                            Proprietary                                                       Built-in iOS framework for peer-
++                                                 devices)                                              (Apple)                                                           to-peer (BLE/Wi-Fi); closed but
++                                                                                                                                                                         high-level.
++
++ΓÇó Web Bluetooth: Built into Chrome/Edge, but currently only allows connecting to BLE peripherals
++ (e.g. IoT devices), not to other phones running the gameπÇÉ13ΓÇáL25-L28πÇæ. In practice, true P2P
++ between browsers is not supported, so on-the-fly multiplayer must use native Bluetooth or a
++ mesh network.
++
++ΓÇó Cordova Bluetooth LE: A proven plugin (Apache-2.0) that lets a JavaScript app scan/connect over
++ BLEπÇÉ35ΓÇáL416-L424πÇæ. Use this for Android/iOS builds with Phaser or GDevelop.
++
++ΓÇó Native APIs: Alternatively, for Godot or native layers, one could implement Bluetooth via
++ platform SDKs. We plan a simplified host-client model (one device as Host/server, others as
++ Clients) and implement client-side prediction and server reconciliation to sync state.
++
++Development Timeline
++
++                                                                                                       Aircade 5-Phase Development Timeline
++
++Phase 1: Prototype         Core loop & UI proto
++
++Phase 2: Core Systems                                          Survival Stats & Inventory              Crafting & Resource Systems
++                                                 2026-09-01
++Phase 3: Content & Quests                                                                                                           Quests / Story & Dialogue
++                                                                                                                                                Environment Art & Audio
++
++Phase 4: Multiplayer                                                                                                                                                               Bluetooth P2P Sync Layer
++                                                                                                                                                                         Multiplayer UI & Testing
++Phase 5: Polish & Release                                                                  2026-10-01                               2026-11-01                                                                                   Optimization & Battery Tuning
++           2026-08-01                                                                                                                                                                                       2026-12-01  Final Testing & Launch Prep
++
++                                                                                                                                                                                                                                                                                      2027-01-01
++
++Phase 1: Prototype & Core Loop
++
++        ΓÇó Goal: Establish a working single-player prototype demonstrating basic movement, environment,
++          and the survival stats. Verify the core gameplay loop (explore, gather, survive) is fun on its own.
++
++        ΓÇó Duration: ~3 weeks.
++
++                                                                                                       2
++        ΓÇó Deliverables: Prototype build with player movement (8-directional), basic collision, UI showing
++          Health/Hunger/Thirst bars, and a small test level (e.g. a section of island or forest) with a few
++          pick-up items (wood, food, water).
++
++        ΓÇó Team Tasks:
++        ΓÇó Dhruv (OpenCode/Nemtron/NVIDIA): Use the OpenCode CLI with an NVIDIA AI model to
++
++          scaffold the project (create initial files, set up Phaser or Godot scene). Prompt Nemtron to
++          generate boilerplate for player movement and camera control code. Refine collision detection
++          and input handling. Use NVIDIA AI (e.g. an image-generation model) to create placeholder 8-bit
++          sprites (or generate them via code and convert to pixel art). Implement basic UI HUD (health bar,
++          icons) by asking Nemtron for code examples. Write initial automated tests for player movement
++          using OpenCodeΓÇÖs test generation capabilities.
++        ΓÇó Milind (Antigravity): Set up the development environment on mobile/hardware. Configure a
++          test device (Android phone) and ensure remote debugging tools work. With Antigravity AI IDE,
++          generate and refine code for touch controls or virtual joystick. Help integrate DhruvΓÇÖs code into
++          an APK build (using Cordova/Android Studio). Use Antigravity to write an automated build script
++          that exports the HTML5 game as an Android APK. Prototype saving player stats in local storage
++          or file (using plugin or engine API).
++        ΓÇó Vinayak (Antigravity): Use Antigravity AI to design the first UI mockups (inventory screen,
++          status bars, simple menus) and produce matching pixel-art icons (water drop, apple, etc.).
++          Implement these assets in the engine: add the HUD overlay, text labels, and placeholder
++          inventory slot. Set up the initial scene (camera, terrain tiles) using engine tools or GDevelop
++          events. Write placeholder quest text (e.g. ΓÇ£Find water!ΓÇ¥) and implement a simple event to display
++          it. Document the prototypeΓÇÖs scope and usage for the next phase.
++        ΓÇó Tools/Libraries/Languages: Phaser 3 (JavaScript/TypeScript) or Godot 4 (GDScript/C#) as chosen
++          engine; Git/GitHub; VS Code; OpenCode CLI (with OpenAI/GPT or Claude models); Nemtron
++          agent; NVIDIA model (for assets/code); Antigravity IDE; HTML5/Cordova for Android build; Piskel/
++          LibreSprite (for art if not fully AI-generated).
++        ΓÇó Integration Points: Integrate DhruvΓÇÖs code and VinayakΓÇÖs assets into one build. Ensure MilindΓÇÖs
++          Android export can run the game. Sync local storage (save state) code with game events (on
++          exit).
++        ΓÇó Testing Checklist: Verify player can move in all directions and collide correctly. Ensure stats bars
++          (health/hunger/thirst) update. Test picking up sample resources (food/water). Confirm game
++          runs fully offline (no crashes if disconnected). Deploy to phone and ensure the APK launches.
++        ΓÇó Handoff Notes: Commit all code, art, and assets to repo. Merge tests for movement and
++          resource pickup. Prepare documentation: ΓÇ£Prototype Build NotesΓÇ¥ (includes controls, stats logic,
++          assets list). This prototype will serve as the foundation for fleshing out survival systems in Phase
++          2.
++
++Phase 2: Core Systems & Single-Player Features
++
++        ΓÇó Goal: Build out the full single-player survival mechanics and environment generation.
++          Implement procedural terrain, resource gathering, crafting, and inventory.
++
++        ΓÇó Duration: ~5 weeks.
++        ΓÇó Deliverables: Expanded game with multiple resources (water sources, food, wood), crafting
++
++          menu, day/night cycle, weather effects, basic procedural map generation (e.g. random island/
++          forest sections). Functional inventory and crafting UI. A first complete ΓÇ£mini-campaignΓÇ¥ of quests
++          (find water, build a fire, explore crash site).
++        ΓÇó Team Tasks:
++        ΓÇó Dhruv (OpenCode/Nemtron/NVIDIA): Use OpenCode to generate code for new survival stats
++          (Stamina, body temperature) and resource tables. Prompt Nemtron to code the procedural map
++          generation logic (using Perlin noise or tile algorithms). Implement a crafting system: define JSON
++
++                                                                         3
++          recipes (wood+stone ΓåÆ axe, etc.) and code the crafting UI. Use the NVIDIA model to auto-
++          generate more complex sprites (trees, rocks, tools) from textual prompts. Write code to apply
++          weather effects (rain, heat) to stats. Implement auto-save to device on checkpoints (using local
++          file or WebStorage API).
++        ΓÇó Milind (Antigravity): Integrate Bluetooth hardware as a simulated multiplayer layer stub for
++          now: with Antigravity, draft code for a Bluetooth Manager class (scanning and connecting) as
++          future work. Optimize core loops to run smoothly on target devices (profile code with Android
++          Studio, reduce draw calls). Configure engine plugins for mobile sensors (e.g. accelerometer input
++          to shake for certain actions). Continue building and testing on device; ensure offline save uses
++          correct Android permissions (file write). Use Antigravity to generate and fix unit tests for
++          inventory management and resource logic.
++        ΓÇó Vinayak (Antigravity): Create and animate environment assets via Antigravity: generate sets of
++          8-bit tile sprites (ground types, water, trees). Use Antigravity to help write shader code or
++          animations for day/night transitions (if engine supports shaders, otherwise use frame
++          animations). Implement the quest UI and journal system in the engine, writing dialogs and quest
++          descriptions (prompting AI for story flavor). Integrate Bosca Ceoil or SFXR for background music
++          and sound effects (Antigravity can suggest melody themes or effects). Polish the UI: inventory
++          screen, crafting menu, health bar design. Document the quest flow and game logic for the team.
++        ΓÇó Tools/Libraries/Languages: Same engine; Node.js/npm (if Phaser) or Godot editor; IndexedDB
++          or SQLite plugin for deep saves; Git/GitHub; Antigravity agents; Libresprite/Piskel for any manual
++          touch-ups; Box2D physics (if needed for hunting or traps).
++        ΓÇó Integration Points: Link the procedural world generator to the gameplay: objects placed in the
++          map (water pools, trees). Integrate inventory/crafting code with UI implemented by Vinayak.
++          Hook up persistent save after each quest objective. Prepare a test scene for each environment
++          (tropical island, forest).
++        ΓÇó Testing Checklist: Ensure resource nodes (trees, water) spawn and are gatherable. Test crafting:
++          combine items to make tools/shelters. Validate health/hunger decrease/regeneration logic.
++          Check day/night cycle and weather damage (heat or cold) affect stats correctly. Test save/load:
++          progress is saved and restored accurately after quitting. All single-player features should work
++          offline.
++        ΓÇó Handoff Notes: Finalize detailed Game Design Document sections on survival mechanics and
++          quests. Merge completed asset sets and code for resource/crafting systems. Provide integration
++          instructions: how to generate new maps, adjust quests, and add new items. Phase 3 will add
++          narrative and polish art, so assets should be organized and the codebase stable.
++
++Phase 3: Content, UI & Narrative
++
++        ΓÇó Goal: Flesh out game content: quests, story, artwork, animations, and audio. Create a more
++          immersive world by adding multiple biomes and visual polish.
++
++        ΓÇó Duration: ~3ΓÇô4 weeks.
++        ΓÇó Deliverables: A complete in-game episode or demo: handcrafted map sections for a hot island
++
++          and dense forest, each with distinctive art and challenges. Full quest chain implemented via
++          dialogue boxes or diary entries. Animated sprites (rain, fire, wildlife). Music and sound
++          integrated. UI/UX finalized (menus, buttons, HUD styling).
++        ΓÇó Team Tasks:
++        ΓÇó Dhruv (OpenCode/Nemtron/NVIDIA): Use Nemtron to script event sequences for quests and
++          cutscenes (e.g. plane crash flashback, NPC discovery). Automate placement of narrative markers
++          (journals, flares). Implement optimization for asset streaming (load scenes progressively). Refine
++          graphics performance: use Nemtron or NVIDIA model to minify sprite atlases and compress
++          textures. Integrate audio triggers (play thunder sound, music track) via code. Prepare a build
++          that exports to WebGL (for iOS browser) and test the web version.
++
++                                                                         4
++        ΓÇó Milind (Antigravity): Test how the game handles multiple scenes/levels (stress-test loading
++          times, memory). With Antigravity, generate a partial code-base for an offline leaderboard or local
++          save cross-check (for future use if Wi-Fi present). Focus on performance: profile on various
++          phones, turn off unnecessary updates (e.g. donΓÇÖt animate offscreen objects). Use Antigravity to
++          produce device test scripts (e.g. automated input sequences) for regression testing. Prepare
++          build scripts for Android APK and iOS (Web export + wrapper) ensuring certificates are set.
++
++        ΓÇó Vinayak (Antigravity): Lead the art pipeline: use Antigravity AI to expand the color palette and
++          refine pixel art for each biome. Animate characters (e.g. player walking, animals). Implement
++          particle effects (smoke, sparks) by having AI suggest shader or sprite-frame sequences.
++          Integrate Bosca Ceoil loops and SFXR effects into the game engine. Polish UI elements: finalize
++          fonts, layout for mobile screens, virtual joystick design. Conduct playtesting sessions, gather
++          feedback on interface/usability.
++
++        ΓÇó Tools/Libraries/Languages: Same engine; Inkscape or Krita (open-source) if needed for art;
++          Bosca Ceoil, LMMS for music; Audacity (free) for sound editing; GitHub Actions for automated
++          builds.
++
++        ΓÇó Integration Points: Import all new assets and ensure they display correctly in scenes. Hook up
++          dialogue/quest systems to the underlying code (trigger survival challenges as narrative
++          objectives). Merge the Android and Web export pipelines: ensure Bluetooth code stub doesnΓÇÖt
++          break the web build.
++
++        ΓÇó Testing Checklist: Walk through every quest from start to end. Check that animations (e.g. rain,
++          fire) play and loop smoothly. Ensure audio cues (ambient sounds, transitions) work. Test UI on
++          target devices (buttons responsive, text legible). Verify platform exports run: Android APK installs
++          and WebGL version runs in a mobile browser.
++
++        ΓÇó Handoff Notes: Deliver all content assets (art, audio, story text) along with source files. Update
++          design docs with final quest list and dialogues. Hand over performance reports and any
++          identified bottlenecks. Prepare the game for the major multiplayer integration in Phase 4.
++
++Phase 4: Multiplayer & Networking
++
++        ΓÇó Goal: Implement local multiplayer over Bluetooth and ensure smooth host/client
++          synchronization. Players should be able to start a game together (Host-Client), share a world
++          state, and play cooperatively (or compete).
++
++        ΓÇó Duration: ~4 weeks.
++        ΓÇó Deliverables: A working multiplayer mode with Bluetooth connectivity: players can create or join
++
++          a session, see each otherΓÇÖs avatars in the world, and share resource data in real-time. All game
++          state (positions, actions, inventory changes) remains in sync. Multiplayer menu/UI for
++          connection.
++        ΓÇó Team Tasks:
++        ΓÇó Dhruv (OpenCode/Nemtron/NVIDIA): Design and code the Bluetooth P2P network layer. Use
++          Nemtron to outline the Host-Client sync model: one device is authoritative (Host), others send
++          input to it. Implement message protocols (position updates, resource pickups) over BLE. Apply
++          client-side prediction and reconciliation (using techniques from multiplayer networking
++          πÇÉ15ΓÇáL35-L43πÇæπÇÉ15ΓÇáL108-L117πÇæ) so that movement feels smooth despite latency. Use
++          OpenCode to generate test harnesses that simulate packet loss or delay. Integrate the new
++          networking code with existing game logic (e.g. linking input events to network messages).
++        ΓÇó Milind (Antigravity): Set up physical testing: pair multiple phones via Bluetooth. Use Antigravity
++          AI to write scripts that automate the connection process (host discovery, pairing). Debug
++          connection stability (reconnect if link drops). Use the hardware skillset to ensure compatibility:
++          manage Android permissions (BLUETOOTH_ADMIN, location); on iOS, use Multipeer as fallback if
++          needed. Optimize Bluetooth throughput: compress game state updates, minimize message size.
++
++                                                                         5
++          Monitor battery usage during Bluetooth play and apply power-saving measures (e.g. cap
++          network tick rate).
++        ΓÇó Vinayak (Antigravity): Build the multiplayer UI: ΓÇ£Host GameΓÇ¥ and ΓÇ£Join GameΓÇ¥ menus, list of
++          nearby devices, connection status indicators. Use Antigravity to generate icons and instructions
++          for joining by Bluetooth. Implement in-game indicators (e.g. player names above avatars, chat or
++          ping UI if feasible). Coordinate on gameplay balance: adjust resource respawn or add PvP mode
++          rules if competitive mode is desired. Test user experience of ΓÇ£connection lostΓÇ¥ and ΓÇ£new player
++          joinedΓÇ¥ events, and make the UI intuitive. Document the multiplayer flow and controls.
++        ΓÇó Tools/Libraries/Languages: Cordova-plugin-ble (Apache-2.0) for BLE connectivity; or native BLE
++          API for Godot; MultipeerConnectivity for iOS if using native; PhaserΓÇÖs network event loop or
++          GodotΓÇÖs High-Level Multiplayer API (if using Godot) as base. Use OpenCodeΓÇÖs CLI to assist in
++          writing networking scripts. Use Node.js for any local testing servers if needed.
++        ΓÇó Integration Points: Integrate network code into the main game loop: inputs send to host, host
++          applies authoritative game updates to all clients. Ensure Bluetooth library is initialized at game
++          start and persists throughout scenes. Tie multiplayer state to the save system (e.g. for co-op
++          progression).
++        ΓÇó Testing Checklist: Pair two or more devices and start a session. Move on one device; verify the
++          other sees it move smoothly (with prediction compensating lag)πÇÉ15ΓÇáL35-L43πÇæ. Test resource
++          sharing: if Host picks up an item, clients should see it removed. Verify that simultaneous actions
++          (both clients moving, crafting) sync correctly. Test scenario: host drops out (what happens?).
++          Check battery draw: game should pause or throttle if app in background. Validate that
++          multiplayer still works offline (no network needed).
++        ΓÇó Handoff Notes: Finalize and comment networking code. Provide a ΓÇ£Bluetooth Multiplayer GuideΓÇ¥
++          summarizing how to add new synced variables or handle new actions. Ensure code paths
++          fallback gracefully if Bluetooth is unavailable (so single-player still works). Prepare builds that
++          include Bluetooth plugin settings. The game is now feature-complete; Phase 5 will focus on
++          polish and deployment.
++
++Phase 5: Optimization, Polishing & Release
++
++        ΓÇó Goal: Ensure the game is stable, performant, and ready for release. Perform final optimizations,
++          platform-specific tweaks, and compliance (store submission assets).
++
++        ΓÇó Duration: ~2ΓÇô3 weeks.
++        ΓÇó Deliverables: Fully tested final builds for Android, iOS (WebGL HTML5 export or native), and
++
++          WebGL. Store-ready package with icons, description, and a post-launch update plan.
++        ΓÇó Team Tasks:
++        ΓÇó Dhruv (OpenCode/Nemtron/NVIDIA): Perform code profiling and optimization: use Nemtron
++
++          to refactor slow functions, reduce unnecessary object allocations. Use NVIDIA AI to generate
++          optimized code snippets (e.g. math libraries for physics). Integrate battery-saving modes:
++          throttle frame rate to 30 FPS on older devices. Finalize the save/load system for version 1.0 (e.g.
++          cloud backup if Wi-Fi exists, but optionalπÇÉ20ΓÇáL124-L133πÇæ). Export builds: for Android (generate
++          signed APK), for iOS (ensure WebGL build runs on SafariΓÇÖs offline mode), for Web (compress
++          assets for WebGL). Write scripts (OpenCode) to automate building for each platform.
++        ΓÇó Milind (Antigravity): Conduct extensive device testing across models. Use Antigravity to run
++          automated stress tests on low-end hardware (simulate memory limits). Optimize power: disable
++          sensors/audio when idle, remove debug logs. Ensure Bluetooth session does not drain battery
++          excessively (see Android battery profiling). Work on packaging: prepare final APK and test on
++          Google PlayΓÇÖs validation, ensure proper handling of permissions. Review analytics and crash logs
++          (if any) to fix issues.
++        ΓÇó Vinayak (Antigravity): Polish the UX: fix any remaining UI bugs (text cutoff, button placement).
++          Add polish animations (e.g. inventory screens sliding) and polish art (anti-alias where needed for
++
++                                                                         6
++          high-res screens). Create marketing materials: screenshots, trailers (recorded gameplay) guided
++          by Antigravity for captions. Set up social media and App Store/Play Store listings with AI-
++          generated descriptions. Collect playtester feedback from final builds and implement minor
++          balance tweaks.
++        ΓÇó Tools/Libraries/Languages: Android Studio (free), Xcode (for iOS WebGL build via PhoneGap or
++          similar), gzip/texture compression tools (e.g. ETC2, WebP); Google Play Console; TestFlight (iOS);
++          analytics (Firebase or free alternative) integration. Version control (GitHub) for final release tags.
++        ΓÇó Integration Points: Coordinate with any external testers or final QA. Ensure the core offline/
++          multiplayer works identically in release mode. Merge final localization or optional online features
++          (leaderboards via Wi-Fi) if decided.
++        ΓÇó Testing Checklist: Full regression: play the entire game on all modes (solo coop, multi coop,
++          multi vs). Test installation/uninstallation, app lifecycle (pause/resume). Battery check: the game
++          should not heat devices unduly after 1h play. Bluetooth sessions tested to max players (2ΓÇô4).
++          Validate saved games load correctly after app kill/restart. Perform compliance checks (age
++          ratings, privacy).
++        ΓÇó Handoff Notes: Tag the final release in version control and document all build steps. Provide a
++          ΓÇ£Release DossierΓÇ¥ with credentials for stores, asset guidelines, and a post-launch support plan.
++          Highlight any known issues for the next update. Prepare a brief post-mortem outlining future
++          expansion possibilities (new biomes, quests, online multiplayer) as part of project debrief.
++Sources: This plan draws on game engine documentation and best practices. Phaser, Godot, and
++GDevelop are all free/MIT licensedπÇÉ2ΓÇáL7-L10πÇæπÇÉ7ΓÇáL330-L338πÇæ. Bluetooth connectivity in browsers is
++limitedπÇÉ13ΓÇáL25-L28πÇæ, so native P2P layers (BLE) will be used. Techniques like client-side prediction and
++server reconciliation (authoritative host model) are standard in peer-to-peer gamesπÇÉ15ΓÇáL35-L43πÇæ
++πÇÉ15ΓÇáL108-L117πÇæ. Offline-first design mandates local data persistence and immediate UI response
++πÇÉ20ΓÇáL124-L133πÇæ. All recommended tools (Phaser, Godot, GDevelop, Piskel, Bosca Ceoil, SFXR, etc.) are
++free/open-source, aligning with project constraints. The phased timeline ensures a working single-
++player foundation before layering on content and multiplayer, with continuous integration and testing
++at each step. Tables and mermaid chart above visualize engine choices and schedule.
++
++                                                                         7
++
+diff --git a/README.md b/README.md
+index a9020ae..73b1f3e 100644
+--- a/README.md
++++ b/README.md
+@@ -21,4 +21,4 @@ See [`aircade/WORKFLOW.md`](aircade/WORKFLOW.md) for the full project guide.
+ |--------|------|
+ | **Dhruv** | Lead Dev / Game Logic |
+ | **Vinayak** | UI/UX + Art + AI Prompt Engineering |
+-| **Milind** | BLE / Hardware / QA |
++| **Milind** | BLE / Hardware / QA |
+\ No newline at end of file
+diff --git a/aircade/README.md b/aircade/README.md
+index 0779843..8ccfbb1 100644
+--- a/aircade/README.md
++++ b/aircade/README.md
+@@ -19,4 +19,4 @@ npx cap open android # Open Android Studio ΓåÆ Run Γû╢∩╕Å
+ 
+ ## Full Documentation
+ 
+-See [WORKFLOW.md](WORKFLOW.md) for the complete project guide, feature list, and architecture.
++See [WORKFLOW.md](WORKFLOW.md) for the complete project guide, feature list, and architecture.
+\ No newline at end of file
+diff --git a/aircade/package-lock.json b/aircade/package-lock.json
+index dc226a3..62f9ece 100644
+--- a/aircade/package-lock.json
++++ b/aircade/package-lock.json
+@@ -12,12 +12,23 @@
+         "@capacitor/cli": "^8.5.0",
+         "@capacitor/core": "^8.5.0",
+         "@capgo/capacitor-bluetooth-low-energy": "^8.2.0",
++        "bcryptjs": "^2.4.3",
++        "cors": "^2.8.5",
++        "express": "^4.19.2",
++        "jsonwebtoken": "^9.0.2",
+         "phaser": "^4.2.1",
+         "react": "^19.2.8",
+         "react-dom": "^19.2.8",
+-        "react-joystick-component": "^6.2.1"
++        "react-joystick-component": "^6.2.1",
++        "socket.io": "^4.7.5",
++        "socket.io-client": "^4.8.3"
+       },
+       "devDependencies": {
++        "@types/bcryptjs": "^2.4.6",
++        "@types/cors": "^2.8.17",
++        "@types/express": "^4.17.21",
++        "@types/jsonwebtoken": "^9.0.6",
++        "@types/node": "^20.14.2",
+         "@types/react": "^19.2.17",
+         "@types/react-dom": "^19.2.3",
+         "@vitejs/plugin-react": "^6.0.4",
+@@ -429,6 +440,9 @@
+         "arm64"
+       ],
+       "dev": true,
++      "libc": [
++        "glibc"
++      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -446,6 +460,9 @@
+         "arm64"
+       ],
+       "dev": true,
++      "libc": [
++        "musl"
++      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -463,6 +480,9 @@
+         "ppc64"
+       ],
+       "dev": true,
++      "libc": [
++        "glibc"
++      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -480,6 +500,9 @@
+         "riscv64"
+       ],
+       "dev": true,
++      "libc": [
++        "glibc"
++      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -497,6 +520,9 @@
+         "riscv64"
+       ],
+       "dev": true,
++      "libc": [
++        "musl"
++      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -514,6 +540,9 @@
+         "s390x"
+       ],
+       "dev": true,
++      "libc": [
++        "glibc"
++      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -531,6 +560,9 @@
+         "x64"
+       ],
+       "dev": true,
++      "libc": [
++        "glibc"
++      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -548,6 +580,9 @@
+         "x64"
+       ],
+       "dev": true,
++      "libc": [
++        "musl"
++      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -718,6 +753,9 @@
+         "arm64"
+       ],
+       "dev": true,
++      "libc": [
++        "glibc"
++      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -735,6 +773,9 @@
+         "arm64"
+       ],
+       "dev": true,
++      "libc": [
++        "musl"
++      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -752,6 +793,9 @@
+         "ppc64"
+       ],
+       "dev": true,
++      "libc": [
++        "glibc"
++      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -769,6 +813,9 @@
+         "s390x"
+       ],
+       "dev": true,
++      "libc": [
++        "glibc"
++      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -786,6 +833,9 @@
+         "x64"
+       ],
+       "dev": true,
++      "libc": [
++        "glibc"
++      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -803,6 +853,9 @@
+         "x64"
+       ],
+       "dev": true,
++      "libc": [
++        "musl"
++      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -886,6 +939,12 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/@socket.io/component-emitter": {
++      "version": "3.1.2",
++      "resolved": "https://registry.npmjs.org/@socket.io/component-emitter/-/component-emitter-3.1.2.tgz",
++      "integrity": "sha512-9BCxFwvbGg/RsZK9tjXd8s4UcwR0MWeFQ1XEKIQVVvAGJyINdrqKMcTRyLoK8Rse1GjzLV9cwjWV1olXRWEXVA==",
++      "license": "MIT"
++    },
+     "node_modules/@tybys/wasm-util": {
+       "version": "0.10.3",
+       "resolved": "https://registry.npmjs.org/@tybys/wasm-util/-/wasm-util-0.10.3.tgz",
+@@ -897,6 +956,69 @@
+         "tslib": "^2.4.0"
+       }
+     },
++    "node_modules/@types/bcryptjs": {
++      "version": "2.4.6",
++      "resolved": "https://registry.npmjs.org/@types/bcryptjs/-/bcryptjs-2.4.6.tgz",
++      "integrity": "sha512-9xlo6R2qDs5uixm0bcIqCeMCE6HiQsIyel9KQySStiyqNl2tnj2mP3DX1Nf56MD6KMenNNlBBsy3LJ7gUEQPXQ==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/@types/body-parser": {
++      "version": "1.19.6",
++      "resolved": "https://registry.npmjs.org/@types/body-parser/-/body-parser-1.19.6.tgz",
++      "integrity": "sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/connect": "*",
++        "@types/node": "*"
++      }
++    },
++    "node_modules/@types/connect": {
++      "version": "3.4.38",
++      "resolved": "https://registry.npmjs.org/@types/connect/-/connect-3.4.38.tgz",
++      "integrity": "sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/node": "*"
++      }
++    },
++    "node_modules/@types/cors": {
++      "version": "2.8.19",
++      "resolved": "https://registry.npmjs.org/@types/cors/-/cors-2.8.19.tgz",
++      "integrity": "sha512-mFNylyeyqN93lfe/9CSxOGREz8cpzAhH+E93xJ4xWQf62V8sQ/24reV2nyzUWM6H6Xji+GGHpkbLe7pVoUEskg==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/node": "*"
++      }
++    },
++    "node_modules/@types/express": {
++      "version": "4.17.25",
++      "resolved": "https://registry.npmjs.org/@types/express/-/express-4.17.25.tgz",
++      "integrity": "sha512-dVd04UKsfpINUnK0yBoYHDF3xu7xVH4BuDotC/xGuycx4CgbP48X/KF/586bcObxT0HENHXEU8Nqtu6NR+eKhw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/body-parser": "*",
++        "@types/express-serve-static-core": "^4.17.33",
++        "@types/qs": "*",
++        "@types/serve-static": "^1"
++      }
++    },
++    "node_modules/@types/express-serve-static-core": {
++      "version": "4.19.9",
++      "resolved": "https://registry.npmjs.org/@types/express-serve-static-core/-/express-serve-static-core-4.19.9.tgz",
++      "integrity": "sha512-QP2ESEe/ImWY0HDwNAnK9PvEffUyhLTnWkk7KXzHfyeWAnlrDe1fN77bXl6ia8KT3wPlmA7t9/VPRpnf4Ex9sg==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/node": "*",
++        "@types/qs": "*",
++        "@types/range-parser": "*",
++        "@types/send": "*"
++      }
++    },
+     "node_modules/@types/fs-extra": {
+       "version": "8.1.5",
+       "resolved": "https://registry.npmjs.org/@types/fs-extra/-/fs-extra-8.1.5.tgz",
+@@ -906,15 +1028,61 @@
+         "@types/node": "*"
+       }
+     },
++    "node_modules/@types/http-errors": {
++      "version": "2.0.5",
++      "resolved": "https://registry.npmjs.org/@types/http-errors/-/http-errors-2.0.5.tgz",
++      "integrity": "sha512-r8Tayk8HJnX0FztbZN7oVqGccWgw98T/0neJphO91KkmOzug1KkofZURD4UaD5uH8AqcFLfdPErnBod0u71/qg==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/@types/jsonwebtoken": {
++      "version": "9.0.10",
++      "resolved": "https://registry.npmjs.org/@types/jsonwebtoken/-/jsonwebtoken-9.0.10.tgz",
++      "integrity": "sha512-asx5hIG9Qmf/1oStypjanR7iKTv0gXQ1Ov/jfrX6kS/EO0OFni8orbmGCn0672NHR3kXHwpAwR+B368ZGN/2rA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/ms": "*",
++        "@types/node": "*"
++      }
++    },
++    "node_modules/@types/mime": {
++      "version": "1.3.5",
++      "resolved": "https://registry.npmjs.org/@types/mime/-/mime-1.3.5.tgz",
++      "integrity": "sha512-/pyBZWSLD2n0dcHE3hq8s8ZvcETHtEuF+3E7XVt0Ig2nvsVQXdghHVcEkIWjy9A0wKfTn97a/PSDYohKIlnP/w==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/@types/ms": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/@types/ms/-/ms-2.1.0.tgz",
++      "integrity": "sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/@types/node": {
+-      "version": "26.1.2",
+-      "resolved": "https://registry.npmjs.org/@types/node/-/node-26.1.2.tgz",
+-      "integrity": "sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg==",
++      "version": "20.19.43",
++      "resolved": "https://registry.npmjs.org/@types/node/-/node-20.19.43.tgz",
++      "integrity": "sha512-6oYBAi5ikg4Pl+kGsoYtawUMBT2zZMCvPNF7pVLnHZfd1zf38DRiWn/gT01RYCdUqkv7Fhr+C9ot4/tb+2sVvA==",
+       "license": "MIT",
+       "dependencies": {
+-        "undici-types": "~8.3.0"
++        "undici-types": "~6.21.0"
+       }
+     },
++    "node_modules/@types/qs": {
++      "version": "6.15.1",
++      "resolved": "https://registry.npmjs.org/@types/qs/-/qs-6.15.1.tgz",
++      "integrity": "sha512-GZHUBZR9hckSUhrxmp1nG6NwdpM9fCunJwyThLW1X3AyHgd9IlHb6VANpQQqDr2o/qQp6McZ3y/IA2rVzKzSbw==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/@types/range-parser": {
++      "version": "1.2.7",
++      "resolved": "https://registry.npmjs.org/@types/range-parser/-/range-parser-1.2.7.tgz",
++      "integrity": "sha512-hKormJbkJqzQGhziax5PItDUTMAM9uE2XXQmM37dyd4hVM+5aVl7oVxMVUiVQn2oCQFN/LKCZdvSM0pFRqbSmQ==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/@types/react": {
+       "version": "19.2.18",
+       "resolved": "https://registry.npmjs.org/@types/react/-/react-19.2.18.tgz",
+@@ -935,12 +1103,54 @@
+         "@types/react": "^19.2.0"
+       }
+     },
++    "node_modules/@types/send": {
++      "version": "1.2.1",
++      "resolved": "https://registry.npmjs.org/@types/send/-/send-1.2.1.tgz",
++      "integrity": "sha512-arsCikDvlU99zl1g69TcAB3mzZPpxgw0UQnaHeC1Nwb015xp8bknZv5rIfri9xTOcMuaVgvabfIRA7PSZVuZIQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/node": "*"
++      }
++    },
++    "node_modules/@types/serve-static": {
++      "version": "1.15.10",
++      "resolved": "https://registry.npmjs.org/@types/serve-static/-/serve-static-1.15.10.tgz",
++      "integrity": "sha512-tRs1dB+g8Itk72rlSI2ZrW6vZg0YrLI81iQSTkMmOqnqCaNr/8Ek4VwWcN5vZgCYWbg/JJSGBlUaYGAOP73qBw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/http-errors": "*",
++        "@types/node": "*",
++        "@types/send": "<1"
++      }
++    },
++    "node_modules/@types/serve-static/node_modules/@types/send": {
++      "version": "0.17.6",
++      "resolved": "https://registry.npmjs.org/@types/send/-/send-0.17.6.tgz",
++      "integrity": "sha512-Uqt8rPBE8SY0RK8JB1EzVOIZ32uqy8HwdxCnoCOsYrvnswqmFZ/k+9Ikidlk/ImhsdvBsloHbAlewb2IEBV/Og==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/mime": "^1",
++        "@types/node": "*"
++      }
++    },
+     "node_modules/@types/slice-ansi": {
+       "version": "4.0.0",
+       "resolved": "https://registry.npmjs.org/@types/slice-ansi/-/slice-ansi-4.0.0.tgz",
+       "integrity": "sha512-+OpjSaq85gvlZAYINyzKpLeiFkSC4EsC6IIiT6v6TLSU5k5U83fHGj9Lel8oKEXM0HqgrMVCjXPDPVICtxF7EQ==",
+       "license": "MIT"
+     },
++    "node_modules/@types/ws": {
++      "version": "8.18.1",
++      "resolved": "https://registry.npmjs.org/@types/ws/-/ws-8.18.1.tgz",
++      "integrity": "sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/node": "*"
++      }
++    },
+     "node_modules/@vitejs/plugin-react": {
+       "version": "6.0.5",
+       "resolved": "https://registry.npmjs.org/@vitejs/plugin-react/-/plugin-react-6.0.5.tgz",
+@@ -976,6 +1186,19 @@
+         "node": ">=14.6"
+       }
+     },
++    "node_modules/accepts": {
++      "version": "1.3.8",
++      "resolved": "https://registry.npmjs.org/accepts/-/accepts-1.3.8.tgz",
++      "integrity": "sha512-PYAthTa2m2VKxuvSD3DPC/Gy+U+sOA1LAuT8mkmRuvw+NACSaeXEQ+NHcVF7rONl6qcaxV3Uuemwawk+7+SJLw==",
++      "license": "MIT",
++      "dependencies": {
++        "mime-types": "~2.1.34",
++        "negotiator": "0.6.3"
++      },
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
+     "node_modules/ansi-regex": {
+       "version": "5.0.1",
+       "resolved": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-5.0.1.tgz",
+@@ -1000,6 +1223,12 @@
+         "url": "https://github.com/chalk/ansi-styles?sponsor=1"
+       }
+     },
++    "node_modules/array-flatten": {
++      "version": "1.1.1",
++      "resolved": "https://registry.npmjs.org/array-flatten/-/array-flatten-1.1.1.tgz",
++      "integrity": "sha512-PCVAQswWemu6UdxsDFFX/+gVeYqKAod3D3UVm91jHwynguOwAvYPhx8nNlM++NqRcK6CxxpUafjmhIdKiHibqg==",
++      "license": "MIT"
++    },
+     "node_modules/astral-regex": {
+       "version": "2.0.0",
+       "resolved": "https://registry.npmjs.org/astral-regex/-/astral-regex-2.0.0.tgz",
+@@ -1047,6 +1276,21 @@
+       ],
+       "license": "MIT"
+     },
++    "node_modules/base64id": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/base64id/-/base64id-2.0.0.tgz",
++      "integrity": "sha512-lGe34o6EHj9y3Kts9R4ZYs/Gr+6N7MCaMlIFA3F1R2O5/m7K06AxfSeO5530PEERE6/WyEg3lsuyw4GHlPZHog==",
++      "license": "MIT",
++      "engines": {
++        "node": "^4.5.0 || >= 5.9"
++      }
++    },
++    "node_modules/bcryptjs": {
++      "version": "2.4.3",
++      "resolved": "https://registry.npmjs.org/bcryptjs/-/bcryptjs-2.4.3.tgz",
++      "integrity": "sha512-V/Hy/X9Vt7f3BbPJEi8BdVFMByHi+jNXrYkW3huaybV/kQ0KJg0Y6PkEMbn+zeT+i+SiKZ/HMqJGIIt4LZDqNQ==",
++      "license": "MIT"
++    },
+     "node_modules/big-integer": {
+       "version": "1.6.52",
+       "resolved": "https://registry.npmjs.org/big-integer/-/big-integer-1.6.52.tgz",
+@@ -1056,6 +1300,45 @@
+         "node": ">=0.6"
+       }
+     },
++    "node_modules/body-parser": {
++      "version": "1.20.6",
++      "resolved": "https://registry.npmjs.org/body-parser/-/body-parser-1.20.6.tgz",
++      "integrity": "sha512-p5tAzS57i5MV9fZFDj9LeIiTZEufbSe2eDozP+ElheSUq1m74CRq1jI4mYNDdVs9vQztXFLuk/Gd6BWTdwRJ5g==",
++      "license": "MIT",
++      "dependencies": {
++        "bytes": "~3.1.2",
++        "content-type": "~1.0.5",
++        "debug": "2.6.9",
++        "depd": "2.0.0",
++        "destroy": "~1.2.0",
++        "http-errors": "~2.0.1",
++        "iconv-lite": "~0.4.24",
++        "on-finished": "~2.4.1",
++        "qs": "~6.15.1",
++        "raw-body": "~2.5.3",
++        "type-is": "~1.6.18",
++        "unpipe": "~1.0.0"
++      },
++      "engines": {
++        "node": ">= 0.8",
++        "npm": "1.2.8000 || >= 1.4.16"
++      }
++    },
++    "node_modules/body-parser/node_modules/debug": {
++      "version": "2.6.9",
++      "resolved": "https://registry.npmjs.org/debug/-/debug-2.6.9.tgz",
++      "integrity": "sha512-bC7ElrdJaJnPbAP+1EotYvqZsb3ecl5wi6Bfi6BJTUcNowp6cvspg0jXznRTKDjm/E7AdgFBVeAPVMNcKGsHMA==",
++      "license": "MIT",
++      "dependencies": {
++        "ms": "2.0.0"
++      }
++    },
++    "node_modules/body-parser/node_modules/ms": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/ms/-/ms-2.0.0.tgz",
++      "integrity": "sha512-Tpp60P6IUJDTuOq/5Z8cdskzJujfwqfOTkrwIwj7IRISpnkJnT6SyJ4PCPnGMoFjC9ddhal5KVIYtAt97ix05A==",
++      "license": "MIT"
++    },
+     "node_modules/bplist-creator": {
+       "version": "0.1.0",
+       "resolved": "https://registry.npmjs.org/bplist-creator/-/bplist-creator-0.1.0.tgz",
+@@ -1098,6 +1381,50 @@
+         "node": "*"
+       }
+     },
++    "node_modules/buffer-equal-constant-time": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/buffer-equal-constant-time/-/buffer-equal-constant-time-1.0.1.tgz",
++      "integrity": "sha512-zRpUiDwd/xk6ADqPMATG8vc9VPrkck7T07OIx0gnjmJAnHnTVXNQG3vfvWNuiZIkwu9KrKdA1iJKfsfTVxE6NA==",
++      "license": "BSD-3-Clause"
++    },
++    "node_modules/bytes": {
++      "version": "3.1.2",
++      "resolved": "https://registry.npmjs.org/bytes/-/bytes-3.1.2.tgz",
++      "integrity": "sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
++    "node_modules/call-bind-apply-helpers": {
++      "version": "1.0.2",
++      "resolved": "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz",
++      "integrity": "sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==",
++      "license": "MIT",
++      "dependencies": {
++        "es-errors": "^1.3.0",
++        "function-bind": "^1.1.2"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/call-bound": {
++      "version": "1.0.4",
++      "resolved": "https://registry.npmjs.org/call-bound/-/call-bound-1.0.4.tgz",
++      "integrity": "sha512-+ys997U96po4Kx/ABpBCqhA9EuxJaQWDQg7295H4hBphv3IZg0boBKuwYpt4YXp6MZ5AmZQnU/tyMTlRpaSejg==",
++      "license": "MIT",
++      "dependencies": {
++        "call-bind-apply-helpers": "^1.0.2",
++        "get-intrinsic": "^1.3.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
+     "node_modules/chownr": {
+       "version": "3.0.0",
+       "resolved": "https://registry.npmjs.org/chownr/-/chownr-3.0.0.tgz",
+@@ -1134,6 +1461,59 @@
+         "node": ">=18"
+       }
+     },
++    "node_modules/content-disposition": {
++      "version": "0.5.4",
++      "resolved": "https://registry.npmjs.org/content-disposition/-/content-disposition-0.5.4.tgz",
++      "integrity": "sha512-FveZTNuGw04cxlAiWbzi6zTAL/lhehaWbTtgluJh4/E95DqMwTmha3KZN1aAWA8cFIhHzMZUvLevkw5Rqk+tSQ==",
++      "license": "MIT",
++      "dependencies": {
++        "safe-buffer": "5.2.1"
++      },
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/content-type": {
++      "version": "1.0.5",
++      "resolved": "https://registry.npmjs.org/content-type/-/content-type-1.0.5.tgz",
++      "integrity": "sha512-nTjqfcBFEipKdXCv4YDQWCfmcLZKm81ldF0pAopTvyrFGVbcR6P/VAAd5G7N+0tTr8QqiU0tFadD6FK4NtJwOA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/cookie": {
++      "version": "0.7.2",
++      "resolved": "https://registry.npmjs.org/cookie/-/cookie-0.7.2.tgz",
++      "integrity": "sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/cookie-signature": {
++      "version": "1.0.7",
++      "resolved": "https://registry.npmjs.org/cookie-signature/-/cookie-signature-1.0.7.tgz",
++      "integrity": "sha512-NXdYc3dLr47pBkpUCHtKSwIOQXLVn8dZEuywboCOJY/osA0wFSLlSawr3KN8qXJEyX66FcONTH8EIlVuK0yyFA==",
++      "license": "MIT"
++    },
++    "node_modules/cors": {
++      "version": "2.8.6",
++      "resolved": "https://registry.npmjs.org/cors/-/cors-2.8.6.tgz",
++      "integrity": "sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==",
++      "license": "MIT",
++      "dependencies": {
++        "object-assign": "^4",
++        "vary": "^1"
++      },
++      "engines": {
++        "node": ">= 0.10"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
+     "node_modules/cross-spawn": {
+       "version": "7.0.6",
+       "resolved": "https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz",
+@@ -1181,6 +1561,25 @@
+         "node": ">=8"
+       }
+     },
++    "node_modules/depd": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/depd/-/depd-2.0.0.tgz",
++      "integrity": "sha512-g7nH6P6dyDioJogAAGprGpCtVImJhpPk/roCzdb3fIh61/s/nPsfR6onyMwkCAR/OlC3yBC0lESvUoQEAssIrw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
++    "node_modules/destroy": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/destroy/-/destroy-1.2.0.tgz",
++      "integrity": "sha512-2sJGJTaXIIaR1w4iJSNoN0hnMY7Gpc/n8D4qSCJw8QqFWXf7cuAgnEHxBpweaVcPevC2l3KpjYCx3NypQQgaJg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8",
++        "npm": "1.2.8000 || >= 1.4.16"
++      }
++    },
+     "node_modules/detect-libc": {
+       "version": "2.1.2",
+       "resolved": "https://registry.npmjs.org/detect-libc/-/detect-libc-2.1.2.tgz",
+@@ -1191,6 +1590,35 @@
+         "node": ">=8"
+       }
+     },
++    "node_modules/dunder-proto": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz",
++      "integrity": "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==",
++      "license": "MIT",
++      "dependencies": {
++        "call-bind-apply-helpers": "^1.0.1",
++        "es-errors": "^1.3.0",
++        "gopd": "^1.2.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/ecdsa-sig-formatter": {
++      "version": "1.0.11",
++      "resolved": "https://registry.npmjs.org/ecdsa-sig-formatter/-/ecdsa-sig-formatter-1.0.11.tgz",
++      "integrity": "sha512-nagl3RYrbNv6kQkeJIpt6NJZy8twLB/2vtz6yN9Z4vRKHN4/QZJIEbqohALSgwKdnksuY3k5Addp5lg8sVoVcQ==",
++      "license": "Apache-2.0",
++      "dependencies": {
++        "safe-buffer": "^5.0.1"
++      }
++    },
++    "node_modules/ee-first": {
++      "version": "1.1.1",
++      "resolved": "https://registry.npmjs.org/ee-first/-/ee-first-1.1.1.tgz",
++      "integrity": "sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==",
++      "license": "MIT"
++    },
+     "node_modules/elementtree": {
+       "version": "0.1.7",
+       "resolved": "https://registry.npmjs.org/elementtree/-/elementtree-0.1.7.tgz",
+@@ -1209,6 +1637,58 @@
+       "integrity": "sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==",
+       "license": "MIT"
+     },
++    "node_modules/encodeurl": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/encodeurl/-/encodeurl-2.0.0.tgz",
++      "integrity": "sha512-Q0n9HRi4m6JuGIV1eFlmvJB7ZEVxu93IrMyiMsGC0lrMJMWzRgx6WGquyfQgZVb31vhGgXnfmPNNXmxnOkRBrg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
++    "node_modules/engine.io": {
++      "version": "6.6.9",
++      "resolved": "https://registry.npmjs.org/engine.io/-/engine.io-6.6.9.tgz",
++      "integrity": "sha512-clKkw4C7nJ22mGgoVcCg6V/W/TxdNyIOTr89k2ONZu81qqkddPFDF0LXcbAwhzPD8DjkiRCjzuiO6Y+fkpD4vg==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/cors": "^2.8.12",
++        "@types/node": ">=10.0.0",
++        "@types/ws": "^8.5.12",
++        "accepts": "~1.3.4",
++        "base64id": "2.0.0",
++        "cookie": "~0.7.2",
++        "cors": "~2.8.5",
++        "debug": "~4.4.1",
++        "engine.io-parser": "~5.2.1",
++        "ws": "~8.21.0"
++      },
++      "engines": {
++        "node": ">=10.2.0"
++      }
++    },
++    "node_modules/engine.io-client": {
++      "version": "6.6.6",
++      "resolved": "https://registry.npmjs.org/engine.io-client/-/engine.io-client-6.6.6.tgz",
++      "integrity": "sha512-iY6QdftLQ9pyiPoX082bpf/u1UewnOaJrtJIF9T0++QB34lZrj0uP+Q/bj8AlUsAxqhnkTV2BS8SBZSxOmoV5Q==",
++      "license": "MIT",
++      "dependencies": {
++        "@socket.io/component-emitter": "~3.1.0",
++        "debug": "~4.4.1",
++        "engine.io-parser": "~5.2.1",
++        "ws": "~8.21.0",
++        "xmlhttprequest-ssl": "~2.1.1"
++      }
++    },
++    "node_modules/engine.io-parser": {
++      "version": "5.2.3",
++      "resolved": "https://registry.npmjs.org/engine.io-parser/-/engine.io-parser-5.2.3.tgz",
++      "integrity": "sha512-HqD3yTBfnBxIrbnM1DoD6Pcq8NECnh8d4As1Qgh0z5Gg3jRRIqijury0CL3ghu/edArpUYiYqQiDUQBIs4np3Q==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=10.0.0"
++      }
++    },
+     "node_modules/env-paths": {
+       "version": "2.2.1",
+       "resolved": "https://registry.npmjs.org/env-paths/-/env-paths-2.2.1.tgz",
+@@ -1218,12 +1698,118 @@
+         "node": ">=6"
+       }
+     },
++    "node_modules/es-define-property": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz",
++      "integrity": "sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/es-errors": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz",
++      "integrity": "sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/es-object-atoms": {
++      "version": "1.1.2",
++      "resolved": "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.2.tgz",
++      "integrity": "sha512-HWcBoN6NileqtSydK2FqHbS/LoDd2pqrnQHLyJzBj4kOp/ky2MWMN694xOfkK8/SnUsW2DH7EfyVlydKCsm1Zw==",
++      "license": "MIT",
++      "dependencies": {
++        "es-errors": "^1.3.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/escape-html": {
++      "version": "1.0.3",
++      "resolved": "https://registry.npmjs.org/escape-html/-/escape-html-1.0.3.tgz",
++      "integrity": "sha512-NiSupZ4OeuGwr68lGIeym/ksIZMJodUGOSCZ/FSnTxcrekbvqrgdUxlJOMpijaKZVjAJrWrGs/6Jy8OMuyj9ow==",
++      "license": "MIT"
++    },
++    "node_modules/etag": {
++      "version": "1.8.1",
++      "resolved": "https://registry.npmjs.org/etag/-/etag-1.8.1.tgz",
++      "integrity": "sha512-aIL5Fx7mawVa300al2BnEE4iNvo1qETxLrPI/o05L7z6go7fCw1J6EQmbK4FmJ2AS7kgVF/KEZWufBfdClMcPg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
+     "node_modules/eventemitter3": {
+       "version": "5.0.4",
+       "resolved": "https://registry.npmjs.org/eventemitter3/-/eventemitter3-5.0.4.tgz",
+       "integrity": "sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==",
+       "license": "MIT"
+     },
++    "node_modules/express": {
++      "version": "4.22.2",
++      "resolved": "https://registry.npmjs.org/express/-/express-4.22.2.tgz",
++      "integrity": "sha512-IuL+Elrou2ZvCFHs18/CIzy2Nzvo25nZ1/D2eIZlz7c+QUayAcYoiM2BthCjs+EBHVpjYjcuLDAiCWgeIX3X1Q==",
++      "license": "MIT",
++      "dependencies": {
++        "accepts": "~1.3.8",
++        "array-flatten": "1.1.1",
++        "body-parser": "~1.20.5",
++        "content-disposition": "~0.5.4",
++        "content-type": "~1.0.4",
++        "cookie": "~0.7.1",
++        "cookie-signature": "~1.0.6",
++        "debug": "2.6.9",
++        "depd": "2.0.0",
++        "encodeurl": "~2.0.0",
++        "escape-html": "~1.0.3",
++        "etag": "~1.8.1",
++        "finalhandler": "~1.3.1",
++        "fresh": "~0.5.2",
++        "http-errors": "~2.0.0",
++        "merge-descriptors": "1.0.3",
++        "methods": "~1.1.2",
++        "on-finished": "~2.4.1",
++        "parseurl": "~1.3.3",
++        "path-to-regexp": "~0.1.12",
++        "proxy-addr": "~2.0.7",
++        "qs": "~6.15.1",
++        "range-parser": "~1.2.1",
++        "safe-buffer": "5.2.1",
++        "send": "~0.19.0",
++        "serve-static": "~1.16.2",
++        "setprototypeof": "1.2.0",
++        "statuses": "~2.0.1",
++        "type-is": "~1.6.18",
++        "utils-merge": "1.0.1",
++        "vary": "~1.1.2"
++      },
++      "engines": {
++        "node": ">= 0.10.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
++    "node_modules/express/node_modules/debug": {
++      "version": "2.6.9",
++      "resolved": "https://registry.npmjs.org/debug/-/debug-2.6.9.tgz",
++      "integrity": "sha512-bC7ElrdJaJnPbAP+1EotYvqZsb3ecl5wi6Bfi6BJTUcNowp6cvspg0jXznRTKDjm/E7AdgFBVeAPVMNcKGsHMA==",
++      "license": "MIT",
++      "dependencies": {
++        "ms": "2.0.0"
++      }
++    },
++    "node_modules/express/node_modules/ms": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/ms/-/ms-2.0.0.tgz",
++      "integrity": "sha512-Tpp60P6IUJDTuOq/5Z8cdskzJujfwqfOTkrwIwj7IRISpnkJnT6SyJ4PCPnGMoFjC9ddhal5KVIYtAt97ix05A==",
++      "license": "MIT"
++    },
+     "node_modules/fd-slicer": {
+       "version": "1.1.0",
+       "resolved": "https://registry.npmjs.org/fd-slicer/-/fd-slicer-1.1.0.tgz",
+@@ -1251,6 +1837,57 @@
+         }
+       }
+     },
++    "node_modules/finalhandler": {
++      "version": "1.3.2",
++      "resolved": "https://registry.npmjs.org/finalhandler/-/finalhandler-1.3.2.tgz",
++      "integrity": "sha512-aA4RyPcd3badbdABGDuTXCMTtOneUCAYH/gxoYRTZlIJdF0YPWuGqiAsIrhNnnqdXGswYk6dGujem4w80UJFhg==",
++      "license": "MIT",
++      "dependencies": {
++        "debug": "2.6.9",
++        "encodeurl": "~2.0.0",
++        "escape-html": "~1.0.3",
++        "on-finished": "~2.4.1",
++        "parseurl": "~1.3.3",
++        "statuses": "~2.0.2",
++        "unpipe": "~1.0.0"
++      },
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
++    "node_modules/finalhandler/node_modules/debug": {
++      "version": "2.6.9",
++      "resolved": "https://registry.npmjs.org/debug/-/debug-2.6.9.tgz",
++      "integrity": "sha512-bC7ElrdJaJnPbAP+1EotYvqZsb3ecl5wi6Bfi6BJTUcNowp6cvspg0jXznRTKDjm/E7AdgFBVeAPVMNcKGsHMA==",
++      "license": "MIT",
++      "dependencies": {
++        "ms": "2.0.0"
++      }
++    },
++    "node_modules/finalhandler/node_modules/ms": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/ms/-/ms-2.0.0.tgz",
++      "integrity": "sha512-Tpp60P6IUJDTuOq/5Z8cdskzJujfwqfOTkrwIwj7IRISpnkJnT6SyJ4PCPnGMoFjC9ddhal5KVIYtAt97ix05A==",
++      "license": "MIT"
++    },
++    "node_modules/forwarded": {
++      "version": "0.2.0",
++      "resolved": "https://registry.npmjs.org/forwarded/-/forwarded-0.2.0.tgz",
++      "integrity": "sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/fresh": {
++      "version": "0.5.2",
++      "resolved": "https://registry.npmjs.org/fresh/-/fresh-0.5.2.tgz",
++      "integrity": "sha512-zJ2mQYM18rEFOudeV4GShTGIQ7RbzA7ozbU9I/XBpm7kqgMywgmylMwXHxZJmkVoYkna9d2pVXVXPdYTP9ej8Q==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
+     "node_modules/fs-extra": {
+       "version": "11.4.0",
+       "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-11.4.0.tgz",
+@@ -1280,6 +1917,52 @@
+         "node": "^8.16.0 || ^10.6.0 || >=11.0.0"
+       }
+     },
++    "node_modules/function-bind": {
++      "version": "1.1.2",
++      "resolved": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz",
++      "integrity": "sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==",
++      "license": "MIT",
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/get-intrinsic": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz",
++      "integrity": "sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==",
++      "license": "MIT",
++      "dependencies": {
++        "call-bind-apply-helpers": "^1.0.2",
++        "es-define-property": "^1.0.1",
++        "es-errors": "^1.3.0",
++        "es-object-atoms": "^1.1.1",
++        "function-bind": "^1.1.2",
++        "get-proto": "^1.0.1",
++        "gopd": "^1.2.0",
++        "has-symbols": "^1.1.0",
++        "hasown": "^2.0.2",
++        "math-intrinsics": "^1.1.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/get-proto": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz",
++      "integrity": "sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==",
++      "license": "MIT",
++      "dependencies": {
++        "dunder-proto": "^1.0.1",
++        "es-object-atoms": "^1.0.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
+     "node_modules/glob": {
+       "version": "13.0.6",
+       "resolved": "https://registry.npmjs.org/glob/-/glob-13.0.6.tgz",
+@@ -1297,12 +1980,80 @@
+         "url": "https://github.com/sponsors/isaacs"
+       }
+     },
++    "node_modules/gopd": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz",
++      "integrity": "sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
+     "node_modules/graceful-fs": {
+       "version": "4.2.11",
+       "resolved": "https://registry.npmjs.org/graceful-fs/-/graceful-fs-4.2.11.tgz",
+       "integrity": "sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==",
+       "license": "ISC"
+     },
++    "node_modules/has-symbols": {
++      "version": "1.1.0",
++      "resolved": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz",
++      "integrity": "sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/hasown": {
++      "version": "2.0.4",
++      "resolved": "https://registry.npmjs.org/hasown/-/hasown-2.0.4.tgz",
++      "integrity": "sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==",
++      "license": "MIT",
++      "dependencies": {
++        "function-bind": "^1.1.2"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/http-errors": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/http-errors/-/http-errors-2.0.1.tgz",
++      "integrity": "sha512-4FbRdAX+bSdmo4AUFuS0WNiPz8NgFt+r8ThgNWmlrjQjt1Q7ZR9+zTlce2859x4KSXrwIsaeTqDoKQmtP8pLmQ==",
++      "license": "MIT",
++      "dependencies": {
++        "depd": "~2.0.0",
++        "inherits": "~2.0.4",
++        "setprototypeof": "~1.2.0",
++        "statuses": "~2.0.2",
++        "toidentifier": "~1.0.1"
++      },
++      "engines": {
++        "node": ">= 0.8"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/express"
++      }
++    },
++    "node_modules/iconv-lite": {
++      "version": "0.4.24",
++      "resolved": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.4.24.tgz",
++      "integrity": "sha512-v3MXnZAcvnywkTUEZomIActle7RXXeedOR31wwl7VlyoXO4Qi9arvSenNQWne1TcRwhCL1HwLI21bEqdpj8/rA==",
++      "license": "MIT",
++      "dependencies": {
++        "safer-buffer": ">= 2.1.2 < 3"
++      },
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
+     "node_modules/inherits": {
+       "version": "2.0.4",
+       "resolved": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz",
+@@ -1318,6 +2069,15 @@
+         "node": "^14.17.0 || ^16.13.0 || >=18.0.0"
+       }
+     },
++    "node_modules/ipaddr.js": {
++      "version": "1.9.1",
++      "resolved": "https://registry.npmjs.org/ipaddr.js/-/ipaddr.js-1.9.1.tgz",
++      "integrity": "sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.10"
++      }
++    },
+     "node_modules/is-docker": {
+       "version": "2.2.1",
+       "resolved": "https://registry.npmjs.org/is-docker/-/is-docker-2.2.1.tgz",
+@@ -1360,16 +2120,59 @@
+       "integrity": "sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==",
+       "license": "ISC"
+     },
+-    "node_modules/jsonfile": {
+-      "version": "6.2.1",
+-      "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz",
+-      "integrity": "sha512-zwOTdL3rFQ/lRdBnntKVOX6k5cKJwEc1HdilT71BWEu7J41gXIB2MRp+vxduPSwZJPWBxEzv4yH1wYLJGUHX4Q==",
++    "node_modules/jsonfile": {
++      "version": "6.2.1",
++      "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz",
++      "integrity": "sha512-zwOTdL3rFQ/lRdBnntKVOX6k5cKJwEc1HdilT71BWEu7J41gXIB2MRp+vxduPSwZJPWBxEzv4yH1wYLJGUHX4Q==",
++      "license": "MIT",
++      "dependencies": {
++        "universalify": "^2.0.0"
++      },
++      "optionalDependencies": {
++        "graceful-fs": "^4.1.6"
++      }
++    },
++    "node_modules/jsonwebtoken": {
++      "version": "9.0.3",
++      "resolved": "https://registry.npmjs.org/jsonwebtoken/-/jsonwebtoken-9.0.3.tgz",
++      "integrity": "sha512-MT/xP0CrubFRNLNKvxJ2BYfy53Zkm++5bX9dtuPbqAeQpTVe0MQTFhao8+Cp//EmJp244xt6Drw/GVEGCUj40g==",
++      "license": "MIT",
++      "dependencies": {
++        "jws": "^4.0.1",
++        "lodash.includes": "^4.3.0",
++        "lodash.isboolean": "^3.0.3",
++        "lodash.isinteger": "^4.0.4",
++        "lodash.isnumber": "^3.0.3",
++        "lodash.isplainobject": "^4.0.6",
++        "lodash.isstring": "^4.0.1",
++        "lodash.once": "^4.0.0",
++        "ms": "^2.1.1",
++        "semver": "^7.5.4"
++      },
++      "engines": {
++        "node": ">=12",
++        "npm": ">=6"
++      }
++    },
++    "node_modules/jwa": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/jwa/-/jwa-2.0.1.tgz",
++      "integrity": "sha512-hRF04fqJIP8Abbkq5NKGN0Bbr3JxlQ+qhZufXVr0DvujKy93ZCbXZMHDL4EOtodSbCWxOqR8MS1tXA5hwqCXDg==",
++      "license": "MIT",
++      "dependencies": {
++        "buffer-equal-constant-time": "^1.0.1",
++        "ecdsa-sig-formatter": "1.0.11",
++        "safe-buffer": "^5.0.1"
++      }
++    },
++    "node_modules/jws": {
++      "version": "4.0.1",
++      "resolved": "https://registry.npmjs.org/jws/-/jws-4.0.1.tgz",
++      "integrity": "sha512-EKI/M/yqPncGUUh44xz0PxSidXFr/+r0pA70+gIYhjv+et7yxM+s29Y+VGDkovRofQem0fs7Uvf4+YmAdyRduA==",
+       "license": "MIT",
+       "dependencies": {
+-        "universalify": "^2.0.0"
+-      },
+-      "optionalDependencies": {
+-        "graceful-fs": "^4.1.6"
++        "jwa": "^2.0.1",
++        "safe-buffer": "^5.0.1"
+       }
+     },
+     "node_modules/kleur": {
+@@ -1524,6 +2327,9 @@
+         "arm64"
+       ],
+       "dev": true,
++      "libc": [
++        "glibc"
++      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -1545,6 +2351,9 @@
+         "arm64"
+       ],
+       "dev": true,
++      "libc": [
++        "musl"
++      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -1566,6 +2375,9 @@
+         "x64"
+       ],
+       "dev": true,
++      "libc": [
++        "glibc"
++      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -1587,6 +2399,9 @@
+         "x64"
+       ],
+       "dev": true,
++      "libc": [
++        "musl"
++      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -1642,6 +2457,48 @@
+         "url": "https://opencollective.com/parcel"
+       }
+     },
++    "node_modules/lodash.includes": {
++      "version": "4.3.0",
++      "resolved": "https://registry.npmjs.org/lodash.includes/-/lodash.includes-4.3.0.tgz",
++      "integrity": "sha512-W3Bx6mdkRTGtlJISOvVD/lbqjTlPPUDTMnlXZFnVwi9NKJ6tiAk6LVdlhZMm17VZisqhKcgzpO5Wz91PCt5b0w==",
++      "license": "MIT"
++    },
++    "node_modules/lodash.isboolean": {
++      "version": "3.0.3",
++      "resolved": "https://registry.npmjs.org/lodash.isboolean/-/lodash.isboolean-3.0.3.tgz",
++      "integrity": "sha512-Bz5mupy2SVbPHURB98VAcw+aHh4vRV5IPNhILUCsOzRmsTmSQ17jIuqopAentWoehktxGd9e/hbIXq980/1QJg==",
++      "license": "MIT"
++    },
++    "node_modules/lodash.isinteger": {
++      "version": "4.0.4",
++      "resolved": "https://registry.npmjs.org/lodash.isinteger/-/lodash.isinteger-4.0.4.tgz",
++      "integrity": "sha512-DBwtEWN2caHQ9/imiNeEA5ys1JoRtRfY3d7V9wkqtbycnAmTvRRmbHKDV4a0EYc678/dia0jrte4tjYwVBaZUA==",
++      "license": "MIT"
++    },
++    "node_modules/lodash.isnumber": {
++      "version": "3.0.3",
++      "resolved": "https://registry.npmjs.org/lodash.isnumber/-/lodash.isnumber-3.0.3.tgz",
++      "integrity": "sha512-QYqzpfwO3/CWf3XP+Z+tkQsfaLL/EnUlXWVkIk5FUPc4sBdTehEqZONuyRt2P67PXAk+NXmTBcc97zw9t1FQrw==",
++      "license": "MIT"
++    },
++    "node_modules/lodash.isplainobject": {
++      "version": "4.0.6",
++      "resolved": "https://registry.npmjs.org/lodash.isplainobject/-/lodash.isplainobject-4.0.6.tgz",
++      "integrity": "sha512-oSXzaWypCMHkPC3NvBEaPHf0KsA5mvPrOPgQWDsbg8n7orZ290M0BmC/jgRZ4vcJ6DTAhjrsSYgdsW/F+MFOBA==",
++      "license": "MIT"
++    },
++    "node_modules/lodash.isstring": {
++      "version": "4.0.1",
++      "resolved": "https://registry.npmjs.org/lodash.isstring/-/lodash.isstring-4.0.1.tgz",
++      "integrity": "sha512-0wJxfxH1wgO3GrbuP+dTTk7op+6L41QCXbGINEmD+ny/G/eCqGzxyCsh7159S+mgDDcoarnBw6PC1PS5+wUGgw==",
++      "license": "MIT"
++    },
++    "node_modules/lodash.once": {
++      "version": "4.1.1",
++      "resolved": "https://registry.npmjs.org/lodash.once/-/lodash.once-4.1.1.tgz",
++      "integrity": "sha512-Sb487aTOCr9drQVL8pIxOzVhafOjZN9UU54hiN8PU3uAiSV7lx1yYNpbNmex2PK6dSJoNTSJUUswT651yww3Mg==",
++      "license": "MIT"
++    },
+     "node_modules/lru-cache": {
+       "version": "11.5.2",
+       "resolved": "https://registry.npmjs.org/lru-cache/-/lru-cache-11.5.2.tgz",
+@@ -1651,6 +2508,75 @@
+         "node": "20 || >=22"
+       }
+     },
++    "node_modules/math-intrinsics": {
++      "version": "1.1.0",
++      "resolved": "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz",
++      "integrity": "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/media-typer": {
++      "version": "0.3.0",
++      "resolved": "https://registry.npmjs.org/media-typer/-/media-typer-0.3.0.tgz",
++      "integrity": "sha512-dq+qelQ9akHpcOl/gUVRTxVIOkAJ1wR3QAvb4RsVjS8oVoFjDGTc679wJYmUmknUF5HwMLOgb5O+a3KxfWapPQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/merge-descriptors": {
++      "version": "1.0.3",
++      "resolved": "https://registry.npmjs.org/merge-descriptors/-/merge-descriptors-1.0.3.tgz",
++      "integrity": "sha512-gaNvAS7TZ897/rVaZ0nMtAyxNyi/pdbjbAwUpFQpN70GqnVfOiXpeUUMKRBmzXaSQ8DdTX4/0ms62r2K+hE6mQ==",
++      "license": "MIT",
++      "funding": {
++        "url": "https://github.com/sponsors/sindresorhus"
++      }
++    },
++    "node_modules/methods": {
++      "version": "1.1.2",
++      "resolved": "https://registry.npmjs.org/methods/-/methods-1.1.2.tgz",
++      "integrity": "sha512-iclAHeNqNm68zFtnZ0e+1L2yUIdvzNoauKU4WBA3VvH/vPFieF7qfRlwUZU+DA9P9bPXIS90ulxoUoCH23sV2w==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/mime": {
++      "version": "1.6.0",
++      "resolved": "https://registry.npmjs.org/mime/-/mime-1.6.0.tgz",
++      "integrity": "sha512-x0Vn8spI+wuJ1O6S7gnbaQg8Pxh4NNHb7KSINmEWKiPE4RKOplvijn+NkmYmmRgP68mc70j2EbeTFRsrswaQeg==",
++      "license": "MIT",
++      "bin": {
++        "mime": "cli.js"
++      },
++      "engines": {
++        "node": ">=4"
++      }
++    },
++    "node_modules/mime-db": {
++      "version": "1.52.0",
++      "resolved": "https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz",
++      "integrity": "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/mime-types": {
++      "version": "2.1.35",
++      "resolved": "https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz",
++      "integrity": "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==",
++      "license": "MIT",
++      "dependencies": {
++        "mime-db": "1.52.0"
++      },
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
+     "node_modules/minimatch": {
+       "version": "10.2.6",
+       "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-10.2.6.tgz",
+@@ -1737,6 +2663,48 @@
+         "node": ">=16.0.0"
+       }
+     },
++    "node_modules/negotiator": {
++      "version": "0.6.3",
++      "resolved": "https://registry.npmjs.org/negotiator/-/negotiator-0.6.3.tgz",
++      "integrity": "sha512-+EUsqGPLsM+j/zdChZjsnX51g4XrHFOIXwfnCVPGlQk/k5giakcKsuxCObBRu6DSm9opw/O6slWbJdghQM4bBg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/object-assign": {
++      "version": "4.1.1",
++      "resolved": "https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz",
++      "integrity": "sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/object-inspect": {
++      "version": "1.13.4",
++      "resolved": "https://registry.npmjs.org/object-inspect/-/object-inspect-1.13.4.tgz",
++      "integrity": "sha512-W67iLl4J2EXEGTbfeHCffrjDfitvLANg0UlX3wFUUSTx92KXRFegMHUVgSqE+wvhAbi4WqjGg9czysTV2Epbew==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/on-finished": {
++      "version": "2.4.1",
++      "resolved": "https://registry.npmjs.org/on-finished/-/on-finished-2.4.1.tgz",
++      "integrity": "sha512-oVlzkg3ENAhCk2zdv7IJwd/QUD4z2RxRwpkcGY8psCVcCYZNq4wYnVWALHM+brtuJjePWiYF/ClmuDr8Ch5+kg==",
++      "license": "MIT",
++      "dependencies": {
++        "ee-first": "1.1.1"
++      },
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
+     "node_modules/open": {
+       "version": "8.4.2",
+       "resolved": "https://registry.npmjs.org/open/-/open-8.4.2.tgz",
+@@ -1809,6 +2777,15 @@
+       "integrity": "sha512-UEZIS3/by4OC8vL3P2dTXRETpebLI2NiI5vIrjaD/5UtrkFX/tNbwjTSRAGC/+7CAo2pIcBaRgWmcBBHcsaCIw==",
+       "license": "BlueOak-1.0.0"
+     },
++    "node_modules/parseurl": {
++      "version": "1.3.3",
++      "resolved": "https://registry.npmjs.org/parseurl/-/parseurl-1.3.3.tgz",
++      "integrity": "sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
+     "node_modules/path-key": {
+       "version": "3.1.1",
+       "resolved": "https://registry.npmjs.org/path-key/-/path-key-3.1.1.tgz",
+@@ -1834,6 +2811,12 @@
+         "url": "https://github.com/sponsors/isaacs"
+       }
+     },
++    "node_modules/path-to-regexp": {
++      "version": "0.1.13",
++      "resolved": "https://registry.npmjs.org/path-to-regexp/-/path-to-regexp-0.1.13.tgz",
++      "integrity": "sha512-A/AGNMFN3c8bOlvV9RreMdrv7jsmF9XIfDeCd87+I8RNg6s78BhJxMu69NEMHBSJFxKidViTEdruRwEk/WIKqA==",
++      "license": "MIT"
++    },
+     "node_modules/pend": {
+       "version": "1.2.0",
+       "resolved": "https://registry.npmjs.org/pend/-/pend-1.2.0.tgz",
+@@ -1934,6 +2917,59 @@
+         "node": ">=6"
+       }
+     },
++    "node_modules/proxy-addr": {
++      "version": "2.0.7",
++      "resolved": "https://registry.npmjs.org/proxy-addr/-/proxy-addr-2.0.7.tgz",
++      "integrity": "sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==",
++      "license": "MIT",
++      "dependencies": {
++        "forwarded": "0.2.0",
++        "ipaddr.js": "1.9.1"
++      },
++      "engines": {
++        "node": ">= 0.10"
++      }
++    },
++    "node_modules/qs": {
++      "version": "6.15.3",
++      "resolved": "https://registry.npmjs.org/qs/-/qs-6.15.3.tgz",
++      "integrity": "sha512-O9gl3zCl5h5blw1KGUzQKhA5oUXSl8rwUIM5o0S3nCXMliSvy5Dzx7/DJcI+SwgICv+IneSZwhBh1oSyEHA71A==",
++      "license": "BSD-3-Clause",
++      "dependencies": {
++        "es-define-property": "^1.0.1",
++        "side-channel": "^1.1.1"
++      },
++      "engines": {
++        "node": ">=0.6"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/range-parser": {
++      "version": "1.2.1",
++      "resolved": "https://registry.npmjs.org/range-parser/-/range-parser-1.2.1.tgz",
++      "integrity": "sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/raw-body": {
++      "version": "2.5.3",
++      "resolved": "https://registry.npmjs.org/raw-body/-/raw-body-2.5.3.tgz",
++      "integrity": "sha512-s4VSOf6yN0rvbRZGxs8Om5CWj6seneMwK3oDb4lWDH0UPhWcxwOWw5+qk24bxq87szX1ydrwylIOp2uG1ojUpA==",
++      "license": "MIT",
++      "dependencies": {
++        "bytes": "~3.1.2",
++        "http-errors": "~2.0.1",
++        "iconv-lite": "~0.4.24",
++        "unpipe": "~1.0.0"
++      },
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
+     "node_modules/react": {
+       "version": "19.2.8",
+       "resolved": "https://registry.npmjs.org/react/-/react-19.2.8.tgz",
+@@ -2052,6 +3088,12 @@
+       ],
+       "license": "MIT"
+     },
++    "node_modules/safer-buffer": {
++      "version": "2.1.2",
++      "resolved": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz",
++      "integrity": "sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==",
++      "license": "MIT"
++    },
+     "node_modules/sax": {
+       "version": "1.1.4",
+       "resolved": "https://registry.npmjs.org/sax/-/sax-1.1.4.tgz",
+@@ -2076,6 +3118,66 @@
+         "node": ">=10"
+       }
+     },
++    "node_modules/send": {
++      "version": "0.19.2",
++      "resolved": "https://registry.npmjs.org/send/-/send-0.19.2.tgz",
++      "integrity": "sha512-VMbMxbDeehAxpOtWJXlcUS5E8iXh6QmN+BkRX1GARS3wRaXEEgzCcB10gTQazO42tpNIya8xIyNx8fll1OFPrg==",
++      "license": "MIT",
++      "dependencies": {
++        "debug": "2.6.9",
++        "depd": "2.0.0",
++        "destroy": "1.2.0",
++        "encodeurl": "~2.0.0",
++        "escape-html": "~1.0.3",
++        "etag": "~1.8.1",
++        "fresh": "~0.5.2",
++        "http-errors": "~2.0.1",
++        "mime": "1.6.0",
++        "ms": "2.1.3",
++        "on-finished": "~2.4.1",
++        "range-parser": "~1.2.1",
++        "statuses": "~2.0.2"
++      },
++      "engines": {
++        "node": ">= 0.8.0"
++      }
++    },
++    "node_modules/send/node_modules/debug": {
++      "version": "2.6.9",
++      "resolved": "https://registry.npmjs.org/debug/-/debug-2.6.9.tgz",
++      "integrity": "sha512-bC7ElrdJaJnPbAP+1EotYvqZsb3ecl5wi6Bfi6BJTUcNowp6cvspg0jXznRTKDjm/E7AdgFBVeAPVMNcKGsHMA==",
++      "license": "MIT",
++      "dependencies": {
++        "ms": "2.0.0"
++      }
++    },
++    "node_modules/send/node_modules/debug/node_modules/ms": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/ms/-/ms-2.0.0.tgz",
++      "integrity": "sha512-Tpp60P6IUJDTuOq/5Z8cdskzJujfwqfOTkrwIwj7IRISpnkJnT6SyJ4PCPnGMoFjC9ddhal5KVIYtAt97ix05A==",
++      "license": "MIT"
++    },
++    "node_modules/serve-static": {
++      "version": "1.16.3",
++      "resolved": "https://registry.npmjs.org/serve-static/-/serve-static-1.16.3.tgz",
++      "integrity": "sha512-x0RTqQel6g5SY7Lg6ZreMmsOzncHFU7nhnRWkKgWuMTu5NN0DR5oruckMqRvacAN9d5w6ARnRBXl9xhDCgfMeA==",
++      "license": "MIT",
++      "dependencies": {
++        "encodeurl": "~2.0.0",
++        "escape-html": "~1.0.3",
++        "parseurl": "~1.3.3",
++        "send": "~0.19.1"
++      },
++      "engines": {
++        "node": ">= 0.8.0"
++      }
++    },
++    "node_modules/setprototypeof": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/setprototypeof/-/setprototypeof-1.2.0.tgz",
++      "integrity": "sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw==",
++      "license": "ISC"
++    },
+     "node_modules/shebang-command": {
+       "version": "2.0.0",
+       "resolved": "https://registry.npmjs.org/shebang-command/-/shebang-command-2.0.0.tgz",
+@@ -2097,6 +3199,78 @@
+         "node": ">=8"
+       }
+     },
++    "node_modules/side-channel": {
++      "version": "1.1.1",
++      "resolved": "https://registry.npmjs.org/side-channel/-/side-channel-1.1.1.tgz",
++      "integrity": "sha512-6x6dK6zJdpTzF4sQeNYxwtvBzf6Eg4GtlesS94HOvTudUeyK2WXAaIfmDgsyslYrRBeFIlsi54AYsFGUuhmvrQ==",
++      "license": "MIT",
++      "dependencies": {
++        "es-errors": "^1.3.0",
++        "object-inspect": "^1.13.4",
++        "side-channel-list": "^1.0.1",
++        "side-channel-map": "^1.0.1",
++        "side-channel-weakmap": "^1.0.2"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/side-channel-list": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/side-channel-list/-/side-channel-list-1.0.1.tgz",
++      "integrity": "sha512-mjn/0bi/oUURjc5Xl7IaWi/OJJJumuoJFQJfDDyO46+hBWsfaVM65TBHq2eoZBhzl9EchxOijpkbRC8SVBQU0w==",
++      "license": "MIT",
++      "dependencies": {
++        "es-errors": "^1.3.0",
++        "object-inspect": "^1.13.4"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/side-channel-map": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/side-channel-map/-/side-channel-map-1.0.1.tgz",
++      "integrity": "sha512-VCjCNfgMsby3tTdo02nbjtM/ewra6jPHmpThenkTYh8pG9ucZ/1P8So4u4FGBek/BjpOVsDCMoLA/iuBKIFXRA==",
++      "license": "MIT",
++      "dependencies": {
++        "call-bound": "^1.0.2",
++        "es-errors": "^1.3.0",
++        "get-intrinsic": "^1.2.5",
++        "object-inspect": "^1.13.3"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/side-channel-weakmap": {
++      "version": "1.0.2",
++      "resolved": "https://registry.npmjs.org/side-channel-weakmap/-/side-channel-weakmap-1.0.2.tgz",
++      "integrity": "sha512-WPS/HvHQTYnHisLo9McqBHOJk2FkHO/tlpvldyrnem4aeQp4hai3gythswg6p01oSoTl58rcpiFAjF2br2Ak2A==",
++      "license": "MIT",
++      "dependencies": {
++        "call-bound": "^1.0.2",
++        "es-errors": "^1.3.0",
++        "get-intrinsic": "^1.2.5",
++        "object-inspect": "^1.13.3",
++        "side-channel-map": "^1.0.1"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
+     "node_modules/signal-exit": {
+       "version": "3.0.7",
+       "resolved": "https://registry.npmjs.org/signal-exit/-/signal-exit-3.0.7.tgz",
+@@ -2149,6 +3323,62 @@
+         "url": "https://github.com/chalk/slice-ansi?sponsor=1"
+       }
+     },
++    "node_modules/socket.io": {
++      "version": "4.8.3",
++      "resolved": "https://registry.npmjs.org/socket.io/-/socket.io-4.8.3.tgz",
++      "integrity": "sha512-2Dd78bqzzjE6KPkD5fHZmDAKRNe3J15q+YHDrIsy9WEkqttc7GY+kT9OBLSMaPbQaEd0x1BjcmtMtXkfpc+T5A==",
++      "license": "MIT",
++      "dependencies": {
++        "accepts": "~1.3.4",
++        "base64id": "~2.0.0",
++        "cors": "~2.8.5",
++        "debug": "~4.4.1",
++        "engine.io": "~6.6.0",
++        "socket.io-adapter": "~2.5.2",
++        "socket.io-parser": "~4.2.4"
++      },
++      "engines": {
++        "node": ">=10.2.0"
++      }
++    },
++    "node_modules/socket.io-adapter": {
++      "version": "2.5.8",
++      "resolved": "https://registry.npmjs.org/socket.io-adapter/-/socket.io-adapter-2.5.8.tgz",
++      "integrity": "sha512-6Oy52pbg+kvdCVvjcN+FnY7BvxZ7cIHNScbvztT/It5d0vbwoJoVZmF2gjJmnV0/4WlXRfG15zc45ySk9Ah8bw==",
++      "license": "MIT",
++      "dependencies": {
++        "debug": "~4.4.1",
++        "ws": "~8.21.0"
++      }
++    },
++    "node_modules/socket.io-client": {
++      "version": "4.8.3",
++      "resolved": "https://registry.npmjs.org/socket.io-client/-/socket.io-client-4.8.3.tgz",
++      "integrity": "sha512-uP0bpjWrjQmUt5DTHq9RuoCBdFJF10cdX9X+a368j/Ft0wmaVgxlrjvK3kjvgCODOMMOz9lcaRzxmso0bTWZ/g==",
++      "license": "MIT",
++      "dependencies": {
++        "@socket.io/component-emitter": "~3.1.0",
++        "debug": "~4.4.1",
++        "engine.io-client": "~6.6.1",
++        "socket.io-parser": "~4.2.4"
++      },
++      "engines": {
++        "node": ">=10.0.0"
++      }
++    },
++    "node_modules/socket.io-parser": {
++      "version": "4.2.7",
++      "resolved": "https://registry.npmjs.org/socket.io-parser/-/socket.io-parser-4.2.7.tgz",
++      "integrity": "sha512-IH/iSeO9T6gz1KkFleGDWkG9N3dl4jXVYUtMhIqH10Md0ttMer8nUNWiP1DKuNrybD2xBrixLJdCC9J6ECoYkg==",
++      "license": "MIT",
++      "dependencies": {
++        "@socket.io/component-emitter": "~3.1.0",
++        "debug": "~4.4.1"
++      },
++      "engines": {
++        "node": ">=10.0.0"
++      }
++    },
+     "node_modules/source-map-js": {
+       "version": "1.2.1",
+       "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz",
+@@ -2168,6 +3398,15 @@
+         "node": ">= 10.x"
+       }
+     },
++    "node_modules/statuses": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/statuses/-/statuses-2.0.2.tgz",
++      "integrity": "sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
+     "node_modules/stream-buffers": {
+       "version": "2.2.0",
+       "resolved": "https://registry.npmjs.org/stream-buffers/-/stream-buffers-2.2.0.tgz",
+@@ -2254,6 +3493,15 @@
+         "url": "https://github.com/sponsors/SuperchupuDev"
+       }
+     },
++    "node_modules/toidentifier": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/toidentifier/-/toidentifier-1.0.1.tgz",
++      "integrity": "sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.6"
++      }
++    },
+     "node_modules/tree-kill": {
+       "version": "1.2.2",
+       "resolved": "https://registry.npmjs.org/tree-kill/-/tree-kill-1.2.2.tgz",
+@@ -2269,10 +3517,23 @@
+       "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==",
+       "license": "0BSD"
+     },
++    "node_modules/type-is": {
++      "version": "1.6.18",
++      "resolved": "https://registry.npmjs.org/type-is/-/type-is-1.6.18.tgz",
++      "integrity": "sha512-TkRKr9sUTxEH8MdfuCSP7VizJyzRNMjj2J2do2Jr3Kym598JVdEksuzPQCnlFPW4ky9Q+iA+ma9BGm06XQBy8g==",
++      "license": "MIT",
++      "dependencies": {
++        "media-typer": "0.3.0",
++        "mime-types": "~2.1.24"
++      },
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
+     "node_modules/undici-types": {
+-      "version": "8.3.0",
+-      "resolved": "https://registry.npmjs.org/undici-types/-/undici-types-8.3.0.tgz",
+-      "integrity": "sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==",
++      "version": "6.21.0",
++      "resolved": "https://registry.npmjs.org/undici-types/-/undici-types-6.21.0.tgz",
++      "integrity": "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==",
+       "license": "MIT"
+     },
+     "node_modules/universalify": {
+@@ -2284,6 +3545,15 @@
+         "node": ">= 10.0.0"
+       }
+     },
++    "node_modules/unpipe": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/unpipe/-/unpipe-1.0.0.tgz",
++      "integrity": "sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
+     "node_modules/untildify": {
+       "version": "4.0.0",
+       "resolved": "https://registry.npmjs.org/untildify/-/untildify-4.0.0.tgz",
+@@ -2299,6 +3569,15 @@
+       "integrity": "sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==",
+       "license": "MIT"
+     },
++    "node_modules/utils-merge": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/utils-merge/-/utils-merge-1.0.1.tgz",
++      "integrity": "sha512-pMZTvIkT1d+TFGvDOqodOclx0QWkkgi6Tdoa8gC8ffGAAqz9pzPTZWAybbsHHoED/ztMtkv/VoYTYyShUn81hA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4.0"
++      }
++    },
+     "node_modules/uuid": {
+       "version": "7.0.3",
+       "resolved": "https://registry.npmjs.org/uuid/-/uuid-7.0.3.tgz",
+@@ -2309,6 +3588,15 @@
+         "uuid": "dist/bin/uuid"
+       }
+     },
++    "node_modules/vary": {
++      "version": "1.1.2",
++      "resolved": "https://registry.npmjs.org/vary/-/vary-1.1.2.tgz",
++      "integrity": "sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.8"
++      }
++    },
+     "node_modules/vite": {
+       "version": "8.2.0",
+       "resolved": "https://registry.npmjs.org/vite/-/vite-8.2.0.tgz",
+@@ -2419,6 +3707,27 @@
+         "url": "https://github.com/chalk/wrap-ansi?sponsor=1"
+       }
+     },
++    "node_modules/ws": {
++      "version": "8.21.1",
++      "resolved": "https://registry.npmjs.org/ws/-/ws-8.21.1.tgz",
++      "integrity": "sha512-+0NTnW77fFN/DjQi6k/Sq/Yvk4Sgajw7urW8V+asjXnRgDs9gyGkdb7EzgfhA4goXsRIZKE28fzIXBHEzhuiWw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=10.0.0"
++      },
++      "peerDependencies": {
++        "bufferutil": "^4.0.1",
++        "utf-8-validate": ">=5.0.2"
++      },
++      "peerDependenciesMeta": {
++        "bufferutil": {
++          "optional": true
++        },
++        "utf-8-validate": {
++          "optional": true
++        }
++      }
++    },
+     "node_modules/xcode": {
+       "version": "3.0.1",
+       "resolved": "https://registry.npmjs.org/xcode/-/xcode-3.0.1.tgz",
+@@ -2463,6 +3772,14 @@
+         "node": ">=8.0"
+       }
+     },
++    "node_modules/xmlhttprequest-ssl": {
++      "version": "2.1.2",
++      "resolved": "https://registry.npmjs.org/xmlhttprequest-ssl/-/xmlhttprequest-ssl-2.1.2.tgz",
++      "integrity": "sha512-TEU+nJVUUnA4CYJFLvK5X9AOeH4KvDvhIfm0vV1GaQRtchnG0hgK5p8hw/xjv8cunWYCsiPCSDzObPyhEwq3KQ==",
++      "engines": {
++        "node": ">=0.4.0"
++      }
++    },
+     "node_modules/yallist": {
+       "version": "5.0.0",
+       "resolved": "https://registry.npmjs.org/yallist/-/yallist-5.0.0.tgz",
+diff --git a/aircade/package.json b/aircade/package.json
+index c758355..2c7ad09 100644
+--- a/aircade/package.json
++++ b/aircade/package.json
+@@ -14,16 +14,27 @@
+     "@capacitor/cli": "^8.5.0",
+     "@capacitor/core": "^8.5.0",
+     "@capgo/capacitor-bluetooth-low-energy": "^8.2.0",
++    "bcryptjs": "^2.4.3",
++    "cors": "^2.8.5",
++    "express": "^4.19.2",
++    "jsonwebtoken": "^9.0.2",
+     "phaser": "^4.2.1",
+     "react": "^19.2.8",
+     "react-dom": "^19.2.8",
+-    "react-joystick-component": "^6.2.1"
++    "react-joystick-component": "^6.2.1",
++    "socket.io": "^4.7.5",
++    "socket.io-client": "^4.8.3"
+   },
+   "devDependencies": {
++    "@types/bcryptjs": "^2.4.6",
++    "@types/cors": "^2.8.17",
++    "@types/express": "^4.17.21",
++    "@types/jsonwebtoken": "^9.0.6",
++    "@types/node": "^20.14.2",
+     "@types/react": "^19.2.17",
+     "@types/react-dom": "^19.2.3",
+     "@vitejs/plugin-react": "^6.0.4",
+     "oxlint": "^1.75.0",
+     "vite": "^8.2.0"
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/aircade/public/assets/tree.png b/aircade/public/assets/tree.png
+new file mode 100644
+index 0000000..9c11828
+Binary files /dev/null and b/aircade/public/assets/tree.png differ
+diff --git a/aircade/public/icon_heart.jpg b/aircade/public/icon_heart.jpg
+new file mode 100644
+index 0000000..662334d
+Binary files /dev/null and b/aircade/public/icon_heart.jpg differ
+diff --git a/aircade/public/icon_stone.jpg b/aircade/public/icon_stone.jpg
+new file mode 100644
+index 0000000..7bbb9c2
+Binary files /dev/null and b/aircade/public/icon_stone.jpg differ
+diff --git a/aircade/public/icon_wood.jpg b/aircade/public/icon_wood.jpg
+new file mode 100644
+index 0000000..767fbef
+Binary files /dev/null and b/aircade/public/icon_wood.jpg differ
+diff --git a/aircade/public/icons.svg b/aircade/public/icons.svg
+new file mode 100644
+index 0000000..e952219
+--- /dev/null
++++ b/aircade/public/icons.svg
+@@ -0,0 +1,24 @@
++<svg xmlns="http://www.w3.org/2000/svg">
++  <symbol id="bluesky-icon" viewBox="0 0 16 17">
++    <g clip-path="url(#bluesky-clip)"><path fill="#08060d" d="M7.75 7.735c-.693-1.348-2.58-3.86-4.334-5.097-1.68-1.187-2.32-.981-2.74-.79C.188 2.065.1 2.812.1 3.251s.241 3.602.398 4.13c.52 1.744 2.367 2.333 4.07 2.145-2.495.37-4.71 1.278-1.805 4.512 3.196 3.309 4.38-.71 4.987-2.746.608 2.036 1.307 5.91 4.93 2.746 2.72-2.746.747-4.143-1.747-4.512 1.702.189 3.55-.4 4.07-2.145.156-.528.397-3.691.397-4.13s-.088-1.186-.575-1.406c-.42-.19-1.06-.395-2.741.79-1.755 1.24-3.64 3.752-4.334 5.099"/></g>
++    <defs><clipPath id="bluesky-clip"><path fill="#fff" d="M.1.85h15.3v15.3H.1z"/></clipPath></defs>
++  </symbol>
++  <symbol id="discord-icon" viewBox="0 0 20 19">
++    <path fill="#08060d" d="M16.224 3.768a14.5 14.5 0 0 0-3.67-1.153c-.158.286-.343.67-.47.976a13.5 13.5 0 0 0-4.067 0c-.128-.306-.317-.69-.476-.976A14.4 14.4 0 0 0 3.868 3.77C1.546 7.28.916 10.703 1.231 14.077a14.7 14.7 0 0 0 4.5 2.306q.545-.748.965-1.587a9.5 9.5 0 0 1-1.518-.74q.191-.14.372-.293c2.927 1.369 6.107 1.369 8.999 0q.183.152.372.294-.723.437-1.52.74.418.838.963 1.588a14.6 14.6 0 0 0 4.504-2.308c.37-3.911-.63-7.302-2.644-10.309m-9.13 8.234c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.894 0 1.614.82 1.599 1.82.001 1-.705 1.82-1.6 1.82m5.91 0c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.893 0 1.614.82 1.599 1.82 0 1-.706 1.82-1.6 1.82"/>
++  </symbol>
++  <symbol id="documentation-icon" viewBox="0 0 21 20">
++    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="m15.5 13.333 1.533 1.322c.645.555.967.833.967 1.178s-.322.623-.967 1.179L15.5 18.333m-3.333-5-1.534 1.322c-.644.555-.966.833-.966 1.178s.322.623.966 1.179l1.534 1.321"/>
++    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M17.167 10.836v-4.32c0-1.41 0-2.117-.224-2.68-.359-.906-1.118-1.621-2.08-1.96-.599-.21-1.349-.21-2.848-.21-2.623 0-3.935 0-4.983.369-1.684.591-3.013 1.842-3.641 3.428C3 6.449 3 7.684 3 10.154v2.122c0 2.558 0 3.838.706 4.726q.306.383.713.671c.76.536 1.79.64 3.581.66"/>
++    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M3 10a2.78 2.78 0 0 1 2.778-2.778c.555 0 1.209.097 1.748-.047.48-.129.854-.503.982-.982.145-.54.048-1.194.048-1.749a2.78 2.78 0 0 1 2.777-2.777"/>
++  </symbol>
++  <symbol id="github-icon" viewBox="0 0 19 19">
++    <path fill="#08060d" fill-rule="evenodd" d="M9.356 1.85C5.05 1.85 1.57 5.356 1.57 9.694a7.84 7.84 0 0 0 5.324 7.44c.387.079.528-.168.528-.376 0-.182-.013-.805-.013-1.454-2.165.467-2.616-.935-2.616-.935-.349-.91-.864-1.143-.864-1.143-.71-.48.051-.48.051-.48.787.051 1.2.805 1.2.805.695 1.194 1.817.857 2.268.649.064-.507.27-.857.49-1.052-1.728-.182-3.545-.857-3.545-3.87 0-.857.31-1.558.8-2.104-.078-.195-.349-1 .077-2.078 0 0 .657-.208 2.14.805a7.5 7.5 0 0 1 1.946-.26c.657 0 1.328.092 1.946.26 1.483-1.013 2.14-.805 2.14-.805.426 1.078.155 1.883.078 2.078.502.546.799 1.247.799 2.104 0 3.013-1.818 3.675-3.558 3.87.284.247.528.714.528 1.454 0 1.052-.012 1.896-.012 2.156 0 .208.142.455.528.377a7.84 7.84 0 0 0 5.324-7.441c.013-4.338-3.48-7.844-7.773-7.844" clip-rule="evenodd"/>
++  </symbol>
++  <symbol id="social-icon" viewBox="0 0 20 20">
++    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M12.5 6.667a4.167 4.167 0 1 0-8.334 0 4.167 4.167 0 0 0 8.334 0"/>
++    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M2.5 16.667a5.833 5.833 0 0 1 8.75-5.053m3.837.474.513 1.035c.07.144.257.282.414.309l.93.155c.596.1.736.536.307.965l-.723.73a.64.64 0 0 0-.152.531l.207.903c.164.715-.213.991-.84.618l-.872-.52a.63.63 0 0 0-.577 0l-.872.52c-.624.373-1.003.094-.84-.618l.207-.903a.64.64 0 0 0-.152-.532l-.723-.729c-.426-.43-.289-.864.306-.964l.93-.156a.64.64 0 0 0 .412-.31l.513-1.034c.28-.562.735-.562 1.012 0"/>
++  </symbol>
++  <symbol id="x-icon" viewBox="0 0 19 19">
++    <path fill="#08060d" fill-rule="evenodd" d="M1.893 1.98c.052.072 1.245 1.769 2.653 3.77l2.892 4.114c.183.261.333.48.333.486s-.068.089-.152.183l-.522.593-.765.867-3.597 4.087c-.375.426-.734.834-.798.905a1 1 0 0 0-.118.148c0 .01.236.017.664.017h.663l.729-.83c.4-.457.796-.906.879-.999a692 692 0 0 0 1.794-2.038c.034-.037.301-.34.594-.675l.551-.624.345-.392a7 7 0 0 1 .34-.374c.006 0 .93 1.306 2.052 2.903l2.084 2.965.045.063h2.275c1.87 0 2.273-.003 2.266-.021-.008-.02-1.098-1.572-3.894-5.547-2.013-2.862-2.28-3.246-2.273-3.266.008-.019.282-.332 2.085-2.38l2-2.274 1.567-1.782c.022-.028-.016-.03-.65-.03h-.674l-.3.342a871 871 0 0 1-1.782 2.025c-.067.075-.405.458-.75.852a100 100 0 0 1-.803.91c-.148.172-.299.344-.99 1.127-.304.343-.32.358-.345.327-.015-.019-.904-1.282-1.976-2.808L6.365 1.85H1.8zm1.782.91 8.078 11.294c.772 1.08 1.413 1.973 1.425 1.984.016.017.241.02 1.05.017l1.03-.004-2.694-3.766L7.796 5.75 5.722 2.852l-1.039-.004-1.039-.004z" clip-rule="evenodd"/>
++  </symbol>
++</svg>
+diff --git a/aircade/server.js b/aircade/server.js
+index 5e6be25..0e15fe7 100644
+--- a/aircade/server.js
++++ b/aircade/server.js
+@@ -2,9 +2,12 @@ import express from 'express';
+ import http from 'http';
+ import { Server } from 'socket.io';
+ import cors from 'cors';
++import jwt from 'jsonwebtoken';
++import bcrypt from 'bcryptjs';
+ 
+ const app = express();
+ app.use(cors());
++app.use(express.json());
+ 
+ const server = http.createServer(app);
+ const io = new Server(server, {
+@@ -14,7 +17,11 @@ const io = new Server(server, {
+   }
+ });
+ 
+-// Store active rooms: roomCode -> { players: { socketId: { name, x, y, anim, isHost } } }
++const JWT_SECRET = process.env.JWT_SECRET || 'aircade-dev-secret-change-me';
++const JWT_EXPIRY = '7d';
++
++const users = new Map();
++const scores = new Map();
+ const rooms = {};
+ 
+ const generateRoomCode = () => {
+@@ -26,35 +33,156 @@ const generateRoomCode = () => {
+   return code;
+ };
+ 
++const hashPassword = async (password) => {
++  return bcrypt.hash(password, 10);
++};
++
++const verifyPassword = async (password, hash) => {
++  return bcrypt.compare(password, hash);
++};
++
++const generateToken = (userId) => {
++  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
++};
++
++const verifyToken = (token) => {
++  try {
++    return jwt.verify(token, JWT_SECRET);
++  } catch {
++    return null;
++  }
++};
++
++app.post('/api/auth/signup', async (req, res) => {
++  const { username, password } = req.body;
++  if (!username || !password) {
++    return res.status(400).json({ error: 'username and password required' });
++  }
++  if (username.length > 12) {
++    return res.status(400).json({ error: 'username too long (max 12)' });
++  }
++  if (users.has(username.toLowerCase())) {
++    return res.status(400).json({ error: 'username taken' });
++  }
++  const hash = await hashPassword(password);
++  const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
++  users.set(username.toLowerCase(), { userId, username, passwordHash: hash });
++  scores.set(userId, []);
++  const token = generateToken(userId);
++  res.json({ token, username, userId });
++});
++
++app.post('/api/auth/login', async (req, res) => {
++  const { username, password } = req.body;
++  if (!username || !password) {
++    return res.status(400).json({ error: 'username and password required' });
++  }
++  const user = users.get(username.toLowerCase());
++  if (!user) {
++    return res.status(401).json({ error: 'user not found' });
++  }
++  const valid = await verifyPassword(password, user.passwordHash);
++  if (!valid) {
++    return res.status(401).json({ error: 'incorrect password' });
++  }
++  const token = generateToken(user.userId);
++  res.json({ token, username: user.username, userId: user.userId });
++});
++
++const authMiddleware = (req, res, next) => {
++  const auth = req.headers.authorization;
++  if (!auth?.startsWith('Bearer ')) {
++    return res.status(401).json({ error: 'token required' });
++  }
++  const token = auth.slice(7);
++  const decoded = verifyToken(token);
++  if (!decoded) {
++    return res.status(401).json({ error: 'invalid token' });
++  }
++  req.userId = decoded.userId;
++  next();
++};
++
++app.post('/api/score', authMiddleware, (req, res) => {
++  const { score } = req.body;
++  if (score === undefined || score === null) {
++    return res.status(400).json({ error: 'score required' });
++  }
++  const s = parseInt(score, 10);
++  if (isNaN(s)) {
++    return res.status(400).json({ error: 'score must be integer' });
++  }
++  const userScores = scores.get(req.userId) || [];
++  userScores.push({ score: s, ts: Date.now() });
++  scores.set(req.userId, userScores);
++  res.json({ ok: true });
++});
++
++app.get('/api/leaderboard', (req, res) => {
++  const allScores = [];
++  for (const [userId, userScores] of scores.entries()) {
++    const user = Array.from(users.values()).find(u => u.userId === userId);
++    const username = user?.username || 'Unknown';
++    for (const s of userScores) {
++      allScores.push({ username, score: s.score, ts: s.ts });
++    }
++  }
++  allScores.sort((a, b) => b.score - a.score);
++  res.json(allScores.slice(0, 10));
++});
++
++app.get('/api/profile', authMiddleware, (req, res) => {
++  const user = Array.from(users.values()).find(u => u.userId === req.userId);
++  if (!user) return res.status(404).json({ error: 'not found' });
++  const userScores = scores.get(req.userId) || [];
++  const bestScore = userScores.length > 0 ? Math.max(...userScores.map(s => s.score)) : 0;
++  res.json({ username: user.username, userId: user.userId, bestScore, totalGames: userScores.length });
++});
++
+ io.on('connection', (socket) => {
+   console.log('User connected:', socket.id);
+   let currentRoom = null;
++  let currentUserId = null;
+ 
++  socket.on('authenticate', (data) => {
++    const { token } = data;
++    const decoded = verifyToken(token);
++    if (decoded) {
++      currentUserId = decoded.userId;
++      socket.emit('authenticated', { userId: currentUserId });
++    } else {
++      socket.emit('authError', 'invalid token');
++    }
++  });
++
++  // Gameplay Events
+   socket.on('createRoom', (data) => {
+     const { playerName } = data;
+     let roomCode = generateRoomCode();
+     while (rooms[roomCode]) {
+       roomCode = generateRoomCode();
+     }
+-    
++
+     rooms[roomCode] = {
+-      players: {}
++      players: {},
++      hostId: socket.id
+     };
+-    
++
+     rooms[roomCode].players[socket.id] = {
+       id: socket.id,
++      userId: currentUserId,
+       name: playerName || 'Player',
+       x: 4096 / 2,
+       y: 4096 / 2,
+       anim: 'idle_down',
+       isHost: true
+     };
+-    
++
+     socket.join(roomCode);
+     currentRoom = roomCode;
+-    
++
+     console.log(`Room ${roomCode} created by ${socket.id}`);
+-    
++
+     socket.emit('roomJoined', {
+       roomCode,
+       players: Object.values(rooms[roomCode].players),
+@@ -66,32 +194,33 @@ io.on('connection', (socket) => {
+   socket.on('joinRoom', (data) => {
+     const { roomCode, playerName } = data;
+     const code = roomCode.toUpperCase();
+-    
++
+     if (rooms[code]) {
+       if (Object.keys(rooms[code].players).length >= 4) {
+         socket.emit('error', 'Room is full (max 4 players)');
+         return;
+       }
+-      
++
+       rooms[code].players[socket.id] = {
+         id: socket.id,
++        userId: currentUserId,
+         name: playerName || 'Player',
+         x: 4096 / 2,
+         y: 4096 / 2,
+         anim: 'idle_down',
+         isHost: false
+       };
+-      
++
+       socket.join(code);
+       currentRoom = code;
+-      
++
+       socket.emit('roomJoined', {
+         roomCode: code,
+         players: Object.values(rooms[code].players),
+         isHost: false,
+         myId: socket.id
+       });
+-      
++
+       // Notify others in room
+       socket.to(code).emit('playerJoined', rooms[code].players[socket.id]);
+       console.log(`${socket.id} joined room ${code}`);
+@@ -166,7 +295,8 @@ io.on('connection', (socket) => {
+   });
+ });
+ 
+-const PORT = 3001;
++const PORT = process.env.PORT || 3001;
+ server.listen(PORT, () => {
+   console.log(`Multiplayer Server running on port ${PORT}`);
+-});
++  console.log(`REST API available on port ${PORT}`);
++});
+\ No newline at end of file
+diff --git a/aircade/src/App.css b/aircade/src/App.css
+new file mode 100644
+index 0000000..4e20184
+--- /dev/null
++++ b/aircade/src/App.css
+@@ -0,0 +1,122 @@
++@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
++
++body {
++  font-family: 'Press Start 2P', monospace;
++  margin: 0;
++  overflow: hidden;
++  background-color: #0f172a;
++}
++
++.hud-container {
++  position: absolute;
++  top: 20px;
++  left: 50%;
++  transform: translateX(-50%);
++  z-index: 20;
++  display: flex;
++  gap: 30px;
++  background: rgba(15, 23, 42, 0.8);
++  backdrop-filter: blur(8px);
++  padding: 15px 30px;
++  border-radius: 12px;
++  border: 2px solid rgba(255, 255, 255, 0.1);
++  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
++  color: white;
++  font-size: 16px;
++  text-shadow: 2px 2px 0px rgba(0,0,0,0.5);
++}
++
++.hud-item {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++}
++
++.health-flash {
++  animation: flashRed 0.5s ease-out;
++}
++
++@keyframes flashRed {
++  0% { color: #ff4757; transform: scale(1.3); }
++  100% { color: white; transform: scale(1); }
++}
++
++.craft-btn {
++  position: absolute;
++  top: 100px;
++  right: 30px;
++  z-index: 10;
++  padding: 15px 25px;
++  font-size: 12px;
++  font-family: 'Press Start 2P', monospace;
++  border-radius: 8px;
++  cursor: pointer;
++  background: linear-gradient(45deg, #e67e22, #e74c3c);
++  color: white;
++  border: 2px solid #d35400;
++  font-weight: bold;
++  box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
++  transition: all 0.2s ease;
++  text-shadow: 2px 2px 0px rgba(0,0,0,0.5);
++  line-height: 1.5;
++}
++
++.craft-btn:hover {
++  transform: translateY(-3px) scale(1.05);
++  box-shadow: 0 8px 25px rgba(231, 76, 60, 0.6);
++  background: linear-gradient(45deg, #f39c12, #e74c3c);
++}
++
++.craft-btn:active {
++  transform: translateY(2px) scale(0.95);
++  box-shadow: 0 2px 5px rgba(231, 76, 60, 0.4);
++}
++
++.gather-btn {
++  position: absolute;
++  bottom: 50px;
++  right: 50px;
++  z-index: 10;
++  padding: 15px 25px;
++  font-size: 14px;
++  font-family: 'Press Start 2P', monospace;
++  border-radius: 8px;
++  cursor: pointer;
++  background: rgba(15, 23, 42, 0.8);
++  backdrop-filter: blur(4px);
++  color: white;
++  border: 2px solid rgba(255, 255, 255, 0.2);
++  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
++  transition: all 0.2s ease;
++}
++
++.gather-btn:hover {
++  background: rgba(30, 41, 59, 0.9);
++  border-color: rgba(255, 255, 255, 0.4);
++}
++
++.gather-btn:active {
++  transform: translateY(2px);
++}
++
++.game-over {
++  width: 100vw;
++  height: 100vh;
++  display: flex;
++  justify-content: center;
++  align-items: center;
++  background: #0f172a;
++  color: #ff4757;
++  font-size: 48px;
++  font-family: 'Press Start 2P', monospace;
++  text-shadow: 0 0 20px rgba(255, 71, 87, 0.5);
++  animation: pulse 2s infinite;
++  text-align: center;
++  line-height: 1.5;
++}
++
++@keyframes pulse {
++  0% { opacity: 1; }
++  50% { opacity: 0.8; }
++  100% { opacity: 1; }
++}
+diff --git a/aircade/src/App.jsx b/aircade/src/App.jsx
+index 76098f2..c5f2837 100644
+--- a/aircade/src/App.jsx
++++ b/aircade/src/App.jsx
+@@ -1,8 +1,9 @@
+-import { useRef, useState, useEffect } from 'react';
++import { useRef, useState, useEffect, useCallback } from 'react';
+ import PhaserGame from './game/PhaserGame';
+ import MobileControls from './components/MobileControls';
+-import './index.css';
+ import { multiplayerManager } from './multiplayer/MultiplayerManager';
++import { BLE } from './shared/constants/BleConstants';
++import './index.css';
+ 
+ let audioCtx = null;
+ 
+@@ -70,7 +71,6 @@ export default function App() {
+   const [isMobile, setIsMobile] = useState(window.innerWidth < 768 || 'ontouchstart' in window);
+   const [typedTutorial, setTypedTutorial] = useState('');
+   
+-  const [socket, setSocket] = useState(null);
+   const [playerName, setPlayerName] = useState('');
+   const [roomData, setRoomData] = useState({ roomCode: '', players: [], isHost: false, myId: '' });
+   const [foundRoom, setFoundRoom] = useState({ roomCode: '', hostName: '' });
+@@ -80,6 +80,15 @@ export default function App() {
+   const [pendingState, setPendingState] = useState(null);
+   const tutorialLines = "WASD to move | SPACE to gather\n\nBuild campfires to survive the night\n\nFind 3 Radio Parts to escape";
+ 
++  const _isTouch = navigator.maxTouchPoints > 0;
++  const inputRef = useRef({
++    flags: 0,
++    joy_x: 0,
++    joy_y: 0,
++    target_id: 0,
++    target_type: 0,
++  });
++
+   const changeGameState = (newState) => {
+     setFadeState('fade-out');
+     setPendingState(newState);
+@@ -110,7 +119,6 @@ export default function App() {
+       },
+       onConnectionChange: (state) => {
+         if (state === 'connected') {
+-          // Immediately enter playing state when fully connected via BLE
+           changeGameState('playing');
+         } else if (state === 'disconnected') {
+           setErrorMsg('Disconnected');
+@@ -212,23 +220,31 @@ export default function App() {
+     };
+   }, [gameState]);
+ 
+-  const handleJoystickMove = (e) => {
++  const handleJoystickMove = useCallback((e) => {
++    inputRef.current.joy_x = Math.round(e.x * 1000);
++    inputRef.current.joy_y = Math.round(-e.y * 1000);
+     if (gameRef.current) gameRef.current.events.emit('joystickMove', { x: e.x, y: -e.y });
+-  };
++  }, []);
+ 
+-  const handleJoystickStop = () => {
++  const handleJoystickStop = useCallback(() => {
++    inputRef.current.joy_x = 0;
++    inputRef.current.joy_y = 0;
+     if (gameRef.current) gameRef.current.events.emit('joystickStop');
+-  };
++  }, []);
+ 
+-  const handleChop = () => {
++  const handleChop = useCallback(() => {
++    inputRef.current.flags |= BLE.INPUT_FLAGS.CHOP;
+     if (gameRef.current) gameRef.current.events.emit('chopAction');
+-  };
++    setTimeout(() => {
++      inputRef.current.flags &= ~BLE.INPUT_FLAGS.CHOP;
++    }, 100);
++  }, []);
+ 
+-  const handleCraftCampfire = () => {
++  const handleCraftCampfire = useCallback(() => {
+     if (gameRef.current) {
+       gameRef.current.events.emit('requestCraft');
+     }
+-  };
++  }, []);
+ 
+   const handleCreateRoom = async () => {
+     if (playerName.trim()) {
+@@ -279,11 +295,18 @@ export default function App() {
+   const handleStartGame = () => {
+     if (roomData.isHost) {
+       changeGameState('playing');
+-      // For testing cross-tab, the host just transitions to playing.
+-      // The client will transition on 'connected'
+     }
+   };
+ 
++  // Queue BLE inputs at 20Hz when playing
++  useEffect(() => {
++    if (gameState !== 'playing') return;
++    const interval = setInterval(() => {
++      multiplayerManager.queueInput({ ...inputRef.current });
++    }, 50);
++    return () => clearInterval(interval);
++  }, [gameState]);
++
+   if (gameState === 'menu') {
+     return (
+       <div className={`fade-wrapper ${fadeState}`}>
+@@ -553,8 +576,6 @@ export default function App() {
+         }
+       `}</style>
+ 
+-
+-
+       {tutorialState !== 'hidden' && (
+         <div className="retro-box" style={{ 
+           position: 'absolute', top: '40%', left: '50%', transform: 'translate(-50%, -50%)', 
+@@ -569,7 +590,7 @@ export default function App() {
+         </div>
+       )}
+       
+-      <PhaserGame gameRef={gameRef} socket={socket} roomData={roomData} />
++      <PhaserGame gameRef={gameRef} roomData={roomData} />
+       
+       {isMobile && <MobileControls onMove={handleJoystickMove} onStop={handleJoystickStop} onChop={handleChop} />}
+       {!isMobile && (
+@@ -583,4 +604,4 @@ export default function App() {
+       )}
+     </div>
+   );
+-}
++}
+\ No newline at end of file
+diff --git a/aircade/src/assets/hero.png b/aircade/src/assets/hero.png
+new file mode 100644
+index 0000000..02251f4
+Binary files /dev/null and b/aircade/src/assets/hero.png differ
+diff --git a/aircade/src/assets/react.svg b/aircade/src/assets/react.svg
+new file mode 100644
+index 0000000..6c87de9
+--- /dev/null
++++ b/aircade/src/assets/react.svg
+@@ -0,0 +1 @@
++<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--logos" width="35.93" height="32" preserveAspectRatio="xMidYMid meet" viewBox="0 0 256 228"><path fill="#00D8FF" d="M210.483 73.824a171.49 171.49 0 0 0-8.24-2.597c.465-1.9.893-3.777 1.273-5.621c6.238-30.281 2.16-54.676-11.769-62.708c-13.355-7.7-35.196.329-57.254 19.526a171.23 171.23 0 0 0-6.375 5.848a155.866 155.866 0 0 0-4.241-3.917C100.759 3.829 77.587-4.822 63.673 3.233C50.33 10.957 46.379 33.89 51.995 62.588a170.974 170.974 0 0 0 1.892 8.48c-3.28.932-6.445 1.924-9.474 2.98C17.309 83.498 0 98.307 0 113.668c0 15.865 18.582 31.778 46.812 41.427a145.52 145.52 0 0 0 6.921 2.165a167.467 167.467 0 0 0-2.01 9.138c-5.354 28.2-1.173 50.591 12.134 58.266c13.744 7.926 36.812-.22 59.273-19.855a145.567 145.567 0 0 0 5.342-4.923a168.064 168.064 0 0 0 6.92 6.314c21.758 18.722 43.246 26.282 56.54 18.586c13.731-7.949 18.194-32.003 12.4-61.268a145.016 145.016 0 0 0-1.535-6.842c1.62-.48 3.21-.974 4.76-1.488c29.348-9.723 48.443-25.443 48.443-41.52c0-15.417-17.868-30.326-45.517-39.844Zm-6.365 70.984c-1.4.463-2.836.91-4.3 1.345c-3.24-10.257-7.612-21.163-12.963-32.432c5.106-11 9.31-21.767 12.459-31.957c2.619.758 5.16 1.557 7.61 2.4c23.69 8.156 38.14 20.213 38.14 29.504c0 9.896-15.606 22.743-40.946 31.14Zm-10.514 20.834c2.562 12.94 2.927 24.64 1.23 33.787c-1.524 8.219-4.59 13.698-8.382 15.893c-8.067 4.67-25.32-1.4-43.927-17.412a156.726 156.726 0 0 1-6.437-5.87c7.214-7.889 14.423-17.06 21.459-27.246c12.376-1.098 24.068-2.894 34.671-5.345a134.17 134.17 0 0 1 1.386 6.193ZM87.276 214.515c-7.882 2.783-14.16 2.863-17.955.675c-8.075-4.657-11.432-22.636-6.853-46.752a156.923 156.923 0 0 1 1.869-8.499c10.486 2.32 22.093 3.988 34.498 4.994c7.084 9.967 14.501 19.128 21.976 27.15a134.668 134.668 0 0 1-4.877 4.492c-9.933 8.682-19.886 14.842-28.658 17.94ZM50.35 144.747c-12.483-4.267-22.792-9.812-29.858-15.863c-6.35-5.437-9.555-10.836-9.555-15.216c0-9.322 13.897-21.212 37.076-29.293c2.813-.98 5.757-1.905 8.812-2.773c3.204 10.42 7.406 21.315 12.477 32.332c-5.137 11.18-9.399 22.249-12.634 32.792a134.718 134.718 0 0 1-6.318-1.979Zm12.378-84.26c-4.811-24.587-1.616-43.134 6.425-47.789c8.564-4.958 27.502 2.111 47.463 19.835a144.318 144.318 0 0 1 3.841 3.545c-7.438 7.987-14.787 17.08-21.808 26.988c-12.04 1.116-23.565 2.908-34.161 5.309a160.342 160.342 0 0 1-1.76-7.887Zm110.427 27.268a347.8 347.8 0 0 0-7.785-12.803c8.168 1.033 15.994 2.404 23.343 4.08c-2.206 7.072-4.956 14.465-8.193 22.045a381.151 381.151 0 0 0-7.365-13.322Zm-45.032-43.861c5.044 5.465 10.096 11.566 15.065 18.186a322.04 322.04 0 0 0-30.257-.006c4.974-6.559 10.069-12.652 15.192-18.18ZM82.802 87.83a323.167 323.167 0 0 0-7.227 13.238c-3.184-7.553-5.909-14.98-8.134-22.152c7.304-1.634 15.093-2.97 23.209-3.984a321.524 321.524 0 0 0-7.848 12.897Zm8.081 65.352c-8.385-.936-16.291-2.203-23.593-3.793c2.26-7.3 5.045-14.885 8.298-22.6a321.187 321.187 0 0 0 7.257 13.246c2.594 4.48 5.28 8.868 8.038 13.147Zm37.542 31.03c-5.184-5.592-10.354-11.779-15.403-18.433c4.902.192 9.899.29 14.978.29c5.218 0 10.376-.117 15.453-.343c-4.985 6.774-10.018 12.97-15.028 18.486Zm52.198-57.817c3.422 7.8 6.306 15.345 8.596 22.52c-7.422 1.694-15.436 3.058-23.88 4.071a382.417 382.417 0 0 0 7.859-13.026a347.403 347.403 0 0 0 7.425-13.565Zm-16.898 8.101a358.557 358.557 0 0 1-12.281 19.815a329.4 329.4 0 0 1-23.444.823c-7.967 0-15.716-.248-23.178-.732a310.202 310.202 0 0 1-12.513-19.846h.001a307.41 307.41 0 0 1-10.923-20.627a310.278 310.278 0 0 1 10.89-20.637l-.001.001a307.318 307.318 0 0 1 12.413-19.761c7.613-.576 15.42-.876 23.31-.876H128c7.926 0 15.743.303 23.354.883a329.357 329.357 0 0 1 12.335 19.695a358.489 358.489 0 0 1 11.036 20.54a329.472 329.472 0 0 1-11 20.722Zm22.56-122.124c8.572 4.944 11.906 24.881 6.52 51.026c-.344 1.668-.73 3.367-1.15 5.09c-10.622-2.452-22.155-4.275-34.23-5.408c-7.034-10.017-14.323-19.124-21.64-27.008a160.789 160.789 0 0 1 5.888-5.4c18.9-16.447 36.564-22.941 44.612-18.3ZM128 90.808c12.625 0 22.86 10.235 22.86 22.86s-10.235 22.86-22.86 22.86s-22.86-10.235-22.86-22.86s10.235-22.86 22.86-22.86Z"></path></svg>
+\ No newline at end of file
+diff --git a/aircade/src/assets/vite.svg b/aircade/src/assets/vite.svg
+new file mode 100644
+index 0000000..5101b67
+--- /dev/null
++++ b/aircade/src/assets/vite.svg
+@@ -0,0 +1 @@
++<svg xmlns="http://www.w3.org/2000/svg" width="77" height="47" fill="none" aria-labelledby="vite-logo-title" viewBox="0 0 77 47"><title id="vite-logo-title">Vite</title><style>.parenthesis{fill:#000}@media (prefers-color-scheme:dark){.parenthesis{fill:#fff}}</style><path fill="#9135ff" d="M40.151 45.71c-.663.844-2.02.374-2.02-.699V34.708a2.26 2.26 0 0 0-2.262-2.262H24.493c-.92 0-1.457-1.04-.92-1.788l7.479-10.471c1.07-1.498 0-3.578-1.842-3.578H15.443c-.92 0-1.456-1.04-.92-1.788l9.696-13.576c.213-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.472c-1.07 1.497 0 3.578 1.842 3.578h11.376c.944 0 1.474 1.087.89 1.83L40.153 45.712z"/><mask id="a" width="48" height="47" x="14" y="0" maskUnits="userSpaceOnUse" style="mask-type:alpha"><path fill="#000" d="M40.047 45.71c-.663.843-2.02.374-2.02-.699V34.708a2.26 2.26 0 0 0-2.262-2.262H24.389c-.92 0-1.457-1.04-.92-1.788l7.479-10.472c1.07-1.497 0-3.578-1.842-3.578H15.34c-.92 0-1.456-1.04-.92-1.788l9.696-13.575c.213-.297.556-.474.92-.474H53.93c.92 0 1.456 1.04.92 1.788L47.37 13.03c-1.07 1.498 0 3.578 1.842 3.578h11.376c.944 0 1.474 1.088.89 1.831L40.049 45.712z"/></mask><g mask="url(#a)"><g filter="url(#b)"><ellipse cx="5.508" cy="14.704" fill="#eee6ff" rx="5.508" ry="14.704" transform="rotate(269.814 20.96 11.29)scale(-1 1)"/></g><g filter="url(#c)"><ellipse cx="10.399" cy="29.851" fill="#eee6ff" rx="10.399" ry="29.851" transform="rotate(89.814 -16.902 -8.275)scale(1 -1)"/></g><g filter="url(#d)"><ellipse cx="5.508" cy="30.487" fill="#8900ff" rx="5.508" ry="30.487" transform="rotate(89.814 -19.197 -7.127)scale(1 -1)"/></g><g filter="url(#e)"><ellipse cx="5.508" cy="30.599" fill="#8900ff" rx="5.508" ry="30.599" transform="rotate(89.814 -25.928 4.177)scale(1 -1)"/></g><g filter="url(#f)"><ellipse cx="5.508" cy="30.599" fill="#8900ff" rx="5.508" ry="30.599" transform="rotate(89.814 -25.738 5.52)scale(1 -1)"/></g><g filter="url(#g)"><ellipse cx="14.072" cy="22.078" fill="#eee6ff" rx="14.072" ry="22.078" transform="rotate(93.35 31.245 55.578)scale(-1 1)"/></g><g filter="url(#h)"><ellipse cx="3.47" cy="21.501" fill="#8900ff" rx="3.47" ry="21.501" transform="rotate(89.009 35.419 55.202)scale(-1 1)"/></g><g filter="url(#i)"><ellipse cx="3.47" cy="21.501" fill="#8900ff" rx="3.47" ry="21.501" transform="rotate(89.009 35.419 55.202)scale(-1 1)"/></g><g filter="url(#j)"><ellipse cx="14.592" cy="9.743" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(39.51 14.592 9.743)"/></g><g filter="url(#k)"><ellipse cx="61.728" cy="-5.321" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 61.728 -5.32)"/></g><g filter="url(#l)"><ellipse cx="55.618" cy="7.104" fill="#00c2ff" rx="5.971" ry="9.665" transform="rotate(37.892 55.618 7.104)"/></g><g filter="url(#m)"><ellipse cx="12.326" cy="39.103" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 12.326 39.103)"/></g><g filter="url(#n)"><ellipse cx="12.326" cy="39.103" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 12.326 39.103)"/></g><g filter="url(#o)"><ellipse cx="49.857" cy="30.678" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 49.857 30.678)"/></g><g filter="url(#p)"><ellipse cx="52.623" cy="33.171" fill="#00c2ff" rx="5.971" ry="15.297" transform="rotate(37.892 52.623 33.17)"/></g></g><path d="M6.919 0c-9.198 13.166-9.252 33.575 0 46.789h6.215c-9.25-13.214-9.196-33.623 0-46.789zm62.424 0h-6.215c9.198 13.166 9.252 33.575 0 46.789h6.215c9.25-13.214 9.196-33.623 0-46.789" class="parenthesis"/><defs><filter id="b" width="60.045" height="41.654" x="-5.564" y="16.92" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="7.659"/></filter><filter id="c" width="90.34" height="51.437" x="-40.407" y="-6.762" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="7.659"/></filter><filter id="d" width="79.355" height="29.4" x="-35.435" y="2.801" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="e" width="79.579" height="29.4" x="-30.84" y="20.8" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="f" width="79.579" height="29.4" x="-29.307" y="21.949" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="g" width="74.749" height="58.852" x="29.961" y="-17.13" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="7.659"/></filter><filter id="h" width="61.377" height="25.362" x="37.754" y="3.055" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="i" width="61.377" height="25.362" x="37.754" y="3.055" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="j" width="56.045" height="63.649" x="-13.43" y="-22.082" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="k" width="54.814" height="64.646" x="34.321" y="-37.644" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="l" width="33.541" height="35.313" x="38.847" y="-10.552" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="m" width="54.814" height="64.646" x="-15.081" y="6.78" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="n" width="54.814" height="64.646" x="-15.081" y="6.78" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="o" width="54.814" height="64.646" x="22.45" y="-1.645" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="p" width="39.409" height="43.623" x="32.919" y="11.36" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter></defs></svg>
+diff --git a/aircade/src/game/GameScene.js b/aircade/src/game/GameScene.js
+index 7531038..9ee2a69 100644
+--- a/aircade/src/game/GameScene.js
++++ b/aircade/src/game/GameScene.js
+@@ -31,12 +31,21 @@ export default class GameScene extends Phaser.Scene {
+     this.joystickData = { x: 0, y: 0 };
+     this.chopRequested = false;
+     this.craftRequested = false;
++    this.isHost = false;
++    this.playerId = null;
+     
+     this.players = {}; // Map of id -> { sprite, nameText, id }
+     this.trees = new Map();
+     this.rocks = new Map();
+     this.radios = new Map();
+     this.campfires = new Map();
++    this.networkPlayers = new Map();
++    this.networkCampfires = new Map();
++    this.networkTrees = new Map();
++    this.networkRocks = new Map();
++    this.networkRadios = new Map();
++    this.lastSnapshotTick = 0;
++    this.darknessAlpha = 0;
+ 
+     const bgGraphics = this.add.graphics();
+     bgGraphics.fillStyle(0x34495e, 1);
+@@ -290,8 +299,7 @@ export default class GameScene extends Phaser.Scene {
+       }
+     }
+ 
+-    // Process campfires (snap.campfires doesn't have IDs, just active positions)
+-    // We recreate them every tick for simplicity in the mock.
++    // Process campfires
+     for (const [_, cf] of this.campfires) cf.sprite.destroy();
+     this.campfires.clear();
+     
+@@ -347,6 +355,13 @@ export default class GameScene extends Phaser.Scene {
+         const pObj = this.players[evt.player_id];
+         if (pObj) this.triggerWin(pObj.sprite);
+       }
++    } else if (evt.evt_type === BLE.EVENT_TYPES.PLAYER_LEFT) {
++      const pObj = this.players[evt.player_id];
++      if (pObj) {
++        pObj.sprite.destroy();
++        pObj.nameText.destroy();
++        delete this.players[evt.player_id];
++      }
+     }
+   }
+ 
+@@ -368,7 +383,7 @@ export default class GameScene extends Phaser.Scene {
+ 
+   playSound(key, config) {
+     if (this.cache.audio.exists(key)) {
+-      try { this.sound.play(key, config); } catch (e) {}
++      try { this.sound.play(key, config); } catch (_e) {}
+     }
+   }
+ 
+@@ -385,7 +400,26 @@ export default class GameScene extends Phaser.Scene {
+     this.tweens.add({ targets: floating, y: pObj.sprite.y - 80, alpha: 0, duration: 1500, onComplete: () => floating.destroy() });
+   }
+ 
+-  update(time, delta) {
++  // Network integration methods (from our fork)
++  applySnapshot(snapshot) {
++    if (snapshot.type === 'SNAPSHOT') {
++      this.onStateUpdate(snapshot);
++    } else if (snapshot.type === 'DELTA') {
++      // Could implement delta updates here if needed
++    }
++    this.lastSnapshotTick = snapshot.tick;
++  }
++
++  handleEvent(evt) {
++    this.onNetworkEvent(evt);
++  }
++
++  setHostMode(isHost, playerId) {
++    this.isHost = isHost;
++    this.playerId = playerId;
++  }
++
++  update(_time, _delta) {
+     if (this.isWinning) return;
+ 
+     this.darknessLayer.clear();
+@@ -468,9 +502,6 @@ export default class GameScene extends Phaser.Scene {
+     }
+ 
+     // Queue input to multiplayerManager
+-    // joy_x / joy_y need to be integers for the codec. Codec uses i16 but expects values?
+-    // In HostSimulation: vx = input.joy_x * speed. Wait, does Codec scale them?
+-    // Let's just send [-1, 1].
+     multiplayerManager.queueInput({
+       flags,
+       joy_x,
+@@ -479,4 +510,4 @@ export default class GameScene extends Phaser.Scene {
+       target_type
+     });
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/aircade/src/game/GameScene_backup.js b/aircade/src/game/GameScene_backup.js
+deleted file mode 100644
+index 387d042..0000000
+Binary files a/aircade/src/game/GameScene_backup.js and /dev/null differ
+diff --git a/aircade/src/game/PhaserGame.jsx b/aircade/src/game/PhaserGame.jsx
+index 116cbd1..4a170ef 100644
+--- a/aircade/src/game/PhaserGame.jsx
++++ b/aircade/src/game/PhaserGame.jsx
+@@ -35,4 +35,4 @@ export default function PhaserGame({ gameRef, socket, roomData }) {
+   }, [gameRef, socket, roomData]);
+ 
+   return <div id="phaser-container" className={`fade-wrapper`} style={{ width: '100vw', height: '100vh', position: 'absolute', top: 0, left: 0 }} />;
+-}
++}
+\ No newline at end of file
+diff --git a/aircade/src/index.css b/aircade/src/index.css
+index 415f1f9..5598651 100644
+--- a/aircade/src/index.css
++++ b/aircade/src/index.css
+@@ -1,13 +1,28 @@
+ @import url('https://fonts.googleapis.com/css2?family=Silkscreen&display=swap');
+ 
++:root {
++  --color-bg: #0a0a0a;
++  --color-bg-darker: #050505;
++  --color-bg-dark: #111;
++  --color-text: #fff;
++  --color-border: #444;
++  --color-amber: #e67e22;
++  --color-amber-glow: #f39c12;
++  --color-green: #2ecc71;
++  --color-red: #e74c3c;
++  --color-blue: #3498db;
++}
++
+ * { 
+   font-family: 'Silkscreen', cursive !important; 
++  box-sizing: border-box;
+ }
+ 
+ body {
+   margin: 0;
+   overflow: hidden;
+   background-color: #000;
++  color: var(--color-text);
+ }
+ 
+ .retro-box {
+@@ -274,3 +289,50 @@ body {
+   from, to { border-color: transparent }
+   50% { border-color: orange; }
+ }
++
++.health-flash {
++  animation: flashRed 0.5s ease-out;
++}
++
++@keyframes flashRed {
++  0% { color: #ff0000; transform: scale(1.3); }
++  100% { color: white; transform: scale(1); }
++}
++
++body {
++  margin: 0;
++  overflow: hidden;
++  background-color: #000;
++}
++
++* { 
++  font-family: 'Silkscreen', cursive !important; 
++}
++
++.retro-box {
++  background: #000; 
++  border: 4px solid #fff; 
++  padding: 10px; 
++  color: #fff;
++}
++
++.retro-button {
++  background: #e74c3c; 
++  border: 4px solid #000; 
++  box-shadow: 4px 4px 0px #000; 
++  padding: 15px; 
++  color: #fff; 
++  text-transform: uppercase; 
++  cursor: pointer; 
++  transition: transform 0.1s, box-shadow 0.1s;
++}
++
++.retro-button:active { 
++  transform: translate(4px, 4px); 
++  box-shadow: 0px 0px 0px #000; 
++}
++
++@keyframes flashRed {
++  0% { color: #ff0000; transform: scale(1.3); }
++  100% { color: white; transform: scale(1); }
++}
+\ No newline at end of file
+diff --git a/aircade/src/multiplayer/transports/BleTransport.js b/aircade/src/multiplayer/transports/BleTransport.js
+index e411d5b..2e05d67 100644
+--- a/aircade/src/multiplayer/transports/BleTransport.js
++++ b/aircade/src/multiplayer/transports/BleTransport.js
+@@ -18,6 +18,8 @@ export class BleTransport extends TransportInterface {
+     this._scan_timeout = null;
+     this._listeners = new Map();
+     this.ble = BluetoothLowEnergy;
++    this.hostSimulation = null;
++    this.connected_peers = new Set();
+   }
+ 
+   async initialize() {
+@@ -63,7 +65,7 @@ export class BleTransport extends TransportInterface {
+     this._input_char = BLE.CHAR_INPUT_UUID;
+     this._control_char = BLE.CHAR_CONTROL_UUID;
+ 
+-    let writeListenerHandle = null;
++    let _writeListenerHandle = null;
+     this.ble.addListener('gattCharacteristicWriteRequest', (event) => {
+       if (event.characteristic.toLowerCase() === BLE.CHAR_INPUT_UUID.toLowerCase()) {
+         const buf = new Uint8Array(event.value);
+@@ -72,18 +74,20 @@ export class BleTransport extends TransportInterface {
+         const buf = new Uint8Array(event.value);
+         this._handleControl(buf, event.deviceId);
+       }
+-    }).then(handle => { writeListenerHandle = handle; this._listeners.set('charWrite', handle); });
++    }).then(handle => { _writeListenerHandle = handle; this._listeners.set('charWrite', handle); });
+ 
+-    let connectListenerHandle = null;
++    let _connectListenerHandle = null;
+     this.ble.addListener('centralConnected', (event) => {
+       this.connected = true;
++      this.connected_peers.add(event.deviceId);
+       this.on_peer_connected?.(event.deviceId);
+-    }).then(handle => { connectListenerHandle = handle; this._listeners.set('centralConn', handle); });
++    }).then(handle => { _connectListenerHandle = handle; this._listeners.set('centralConn', handle); });
+ 
+-    let disconnectListenerHandle = null;
++    let _disconnectListenerHandle = null;
+     this.ble.addListener('centralDisconnected', (event) => {
++      this.connected_peers.delete(event.deviceId);
+       this.on_peer_disconnected?.(event.deviceId);
+-    }).then(handle => { disconnectListenerHandle = handle; this._listeners.set('centralDisconn', handle); });
++    }).then(handle => { _disconnectListenerHandle = handle; this._listeners.set('centralDisconn', handle); });
+ 
+     await this.ble.startAdvertising({
+       serviceUuids: [BLE.SERVICE_UUID],
+@@ -280,7 +284,6 @@ export class BleTransport extends TransportInterface {
+     if (!this.connected) return;
+     try {
+       const msg = this.codec.decode(buf);
+-      this.msg_log?.push({ dir: 'in', type: msg.type, data: msg, time: Date.now() });
+       if (msg.type === 'SNAPSHOT' || msg.type === 'DELTA') {
+         this.on_state_update?.(msg);
+       } else if (msg.type === 'EVENT' || msg.type === 'JOIN_ACCEPT' || msg.type === 'PONG' || msg.type === 'SYNC_RESP') {
+diff --git a/aircade/src/multiplayer/transports/MockBleTransport.js b/aircade/src/multiplayer/transports/MockBleTransport.js
+index d2fa645..77db074 100644
+--- a/aircade/src/multiplayer/transports/MockBleTransport.js
++++ b/aircade/src/multiplayer/transports/MockBleTransport.js
+@@ -12,6 +12,8 @@ export class MockBleTransport extends TransportInterface {
+     this.peers = new Map();
+     this.hostSimulation = null;
+     this._client_peer_id = null;
++    this._scanResolver = null;
++    this._connectResolver = null;
+     
+     // Setup BroadcastChannel for cross-tab communication!
+     this.channel = new BroadcastChannel('aircade_mock_ble');
+@@ -191,7 +193,7 @@ export class MockBleTransport extends TransportInterface {
+     }
+   }
+ 
+-  _handleJoinRequest(msg) {
++  _handleJoinRequest(_msg) {
+     if (!this._client_peer_id) return;
+     if (this.hostSimulation) {
+       this.hostSimulation.addPlayer(this._client_peer_id);
+diff --git a/aircade/vite.config.js b/aircade/vite.config.js
+index 777dfc5..d8afc78 100644
+--- a/aircade/vite.config.js
++++ b/aircade/vite.config.js
+@@ -9,4 +9,4 @@ export default defineConfig({
+       // output: { ... }
+     }
+   }
+-})
++})
+\ No newline at end of file
+diff --git a/backend.py b/backend.py
+new file mode 100644
+index 0000000..36eed6e
+--- /dev/null
++++ b/backend.py
+@@ -0,0 +1,97 @@
++from flask import Flask, request, jsonify
++import hashlib
++import os
++import time
++
++app = Flask(__name__)
++
++users = {}
++scores = {}
++tokens = {}
++
++SECRET = os.environ.get("SECRET_KEY", "dev-secret-change-me")
++
++def hash_pw(pw):
++    return hashlib.sha256(pw.encode()).hexdigest()
++
++def gen_token():
++    return hashlib.sha256(os.urandom(32)).hexdigest()
++
++def get_user_from_token(tok):
++    if tok in tokens:
++        return tokens[tok]
++    return None
++
++@app.route("/signup", methods=["POST"])
++def signup():
++    data = request.get_json()
++    if not data:
++        return jsonify({"error": "json required"}), 400
++    username = data.get("username")
++    password = data.get("password")
++    if not username:
++        return jsonify({"error": "username required"}), 400
++    if not password:
++        return jsonify({"error": "password required"}), 400
++    if username in users:
++        return jsonify({"error": "username taken"}), 400
++    users[username] = hash_pw(password)
++    scores[username] = []
++    tok = gen_token()
++    tokens[tok] = username
++    return jsonify({"token": tok})
++
++@app.route("/login", methods=["POST"])
++def login():
++    data = request.get_json()
++    if not data:
++        return jsonify({"error": "json required"}), 400
++    username = data.get("username")
++    password = data.get("password")
++    if not username or not password:
++        return jsonify({"error": "username and password required"}), 400
++    if username not in users:
++        return jsonify({"error": "user not found"}), 401
++    if users[username] != hash_pw(password):
++        return jsonify({"error": "incorrect password"}), 401
++    tok = gen_token()
++    tokens[tok] = username
++    return jsonify({"token": tok})
++
++@app.route("/score", methods=["POST"])
++def submit_score():
++    auth = request.headers.get("Authorization", "")
++    if not auth.startswith("Bearer "):
++        return jsonify({"error": "token required"}), 401
++    tok = auth[7:]
++    username = get_user_from_token(tok)
++    if not username:
++        return jsonify({"error": "invalid token"}), 401
++    data = request.get_json()
++    if not data:
++        return jsonify({"error": "json required"}), 400
++    score = data.get("score")
++    if score is None:
++        return jsonify({"error": "score required"}), 400
++    try:
++        score = int(score)
++    except (ValueError, TypeError):
++        return jsonify({"error": "score must be integer"}), 400
++    scores[username].append({"score": score, "ts": time.time()})
++    # print(f"saved score {score} for {username}")
++    return jsonify({"ok": True})
++
++@app.route("/leaderboard", methods=["GET"])
++def leaderboard():
++    all_scores = []
++    for user, user_scores in scores.items():
++        for s in user_scores:
++            all_scores.append({"username": user, "score": s["score"], "ts": s["ts"]})
++    all_scores.sort(key=lambda x: x["score"], reverse=True)
++    top = all_scores[:10]
++    return jsonify(top)
++
++# TODO: add token expiration cleanup
++
++if __name__ == "__main__":
++    app.run(host="0.0.0.0", port=5000, debug=True)
+\ No newline at end of file

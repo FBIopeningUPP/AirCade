@@ -1,0 +1,134 @@
+﻿diff --git a/aircade/src/App.jsx b/aircade/src/App.jsx
+index 76098f2..c5f2837 100644
+--- a/aircade/src/App.jsx
++++ b/aircade/src/App.jsx
+@@ -1,8 +1,9 @@
+-import { useRef, useState, useEffect } from 'react';
++import { useRef, useState, useEffect, useCallback } from 'react';
+ import PhaserGame from './game/PhaserGame';
+ import MobileControls from './components/MobileControls';
+-import './index.css';
+ import { multiplayerManager } from './multiplayer/MultiplayerManager';
++import { BLE } from './shared/constants/BleConstants';
++import './index.css';
+ 
+ let audioCtx = null;
+ 
+@@ -70,7 +71,6 @@ export default function App() {
+   const [isMobile, setIsMobile] = useState(window.innerWidth < 768 || 'ontouchstart' in window);
+   const [typedTutorial, setTypedTutorial] = useState('');
+   
+-  const [socket, setSocket] = useState(null);
+   const [playerName, setPlayerName] = useState('');
+   const [roomData, setRoomData] = useState({ roomCode: '', players: [], isHost: false, myId: '' });
+   const [foundRoom, setFoundRoom] = useState({ roomCode: '', hostName: '' });
+@@ -80,6 +80,15 @@ export default function App() {
+   const [pendingState, setPendingState] = useState(null);
+   const tutorialLines = "WASD to move | SPACE to gather\n\nBuild campfires to survive the night\n\nFind 3 Radio Parts to escape";
+ 
++  const _isTouch = navigator.maxTouchPoints > 0;
++  const inputRef = useRef({
++    flags: 0,
++    joy_x: 0,
++    joy_y: 0,
++    target_id: 0,
++    target_type: 0,
++  });
++
+   const changeGameState = (newState) => {
+     setFadeState('fade-out');
+     setPendingState(newState);
+@@ -110,7 +119,6 @@ export default function App() {
+       },
+       onConnectionChange: (state) => {
+         if (state === 'connected') {
+-          // Immediately enter playing state when fully connected via BLE
+           changeGameState('playing');
+         } else if (state === 'disconnected') {
+           setErrorMsg('Disconnected');
+@@ -212,23 +220,31 @@ export default function App() {
+     };
+   }, [gameState]);
+ 
+-  const handleJoystickMove = (e) => {
++  const handleJoystickMove = useCallback((e) => {
++    inputRef.current.joy_x = Math.round(e.x * 1000);
++    inputRef.current.joy_y = Math.round(-e.y * 1000);
+     if (gameRef.current) gameRef.current.events.emit('joystickMove', { x: e.x, y: -e.y });
+-  };
++  }, []);
+ 
+-  const handleJoystickStop = () => {
++  const handleJoystickStop = useCallback(() => {
++    inputRef.current.joy_x = 0;
++    inputRef.current.joy_y = 0;
+     if (gameRef.current) gameRef.current.events.emit('joystickStop');
+-  };
++  }, []);
+ 
+-  const handleChop = () => {
++  const handleChop = useCallback(() => {
++    inputRef.current.flags |= BLE.INPUT_FLAGS.CHOP;
+     if (gameRef.current) gameRef.current.events.emit('chopAction');
+-  };
++    setTimeout(() => {
++      inputRef.current.flags &= ~BLE.INPUT_FLAGS.CHOP;
++    }, 100);
++  }, []);
+ 
+-  const handleCraftCampfire = () => {
++  const handleCraftCampfire = useCallback(() => {
+     if (gameRef.current) {
+       gameRef.current.events.emit('requestCraft');
+     }
+-  };
++  }, []);
+ 
+   const handleCreateRoom = async () => {
+     if (playerName.trim()) {
+@@ -279,11 +295,18 @@ export default function App() {
+   const handleStartGame = () => {
+     if (roomData.isHost) {
+       changeGameState('playing');
+-      // For testing cross-tab, the host just transitions to playing.
+-      // The client will transition on 'connected'
+     }
+   };
+ 
++  // Queue BLE inputs at 20Hz when playing
++  useEffect(() => {
++    if (gameState !== 'playing') return;
++    const interval = setInterval(() => {
++      multiplayerManager.queueInput({ ...inputRef.current });
++    }, 50);
++    return () => clearInterval(interval);
++  }, [gameState]);
++
+   if (gameState === 'menu') {
+     return (
+       <div className={`fade-wrapper ${fadeState}`}>
+@@ -553,8 +576,6 @@ export default function App() {
+         }
+       `}</style>
+ 
+-
+-
+       {tutorialState !== 'hidden' && (
+         <div className="retro-box" style={{ 
+           position: 'absolute', top: '40%', left: '50%', transform: 'translate(-50%, -50%)', 
+@@ -569,7 +590,7 @@ export default function App() {
+         </div>
+       )}
+       
+-      <PhaserGame gameRef={gameRef} socket={socket} roomData={roomData} />
++      <PhaserGame gameRef={gameRef} roomData={roomData} />
+       
+       {isMobile && <MobileControls onMove={handleJoystickMove} onStop={handleJoystickStop} onChop={handleChop} />}
+       {!isMobile && (
+@@ -583,4 +604,4 @@ export default function App() {
+       )}
+     </div>
+   );
+-}
++}
+\ No newline at end of file
