@@ -209,6 +209,27 @@ export class HostSimulation {
       if (!pos) continue;
       pos.x += vel.vx * (this.tickMs / 1000);
       pos.y += vel.vy * (this.tickMs / 1000);
+      
+      const checkCollision = (group, radius) => {
+        for (const item of group.values()) {
+          if (!item.active) continue;
+          // For trees, adjust visual center vs hitbox center if needed. Assuming item.x/y is center.
+          const dy_offset = item.type === this.entityTypes.TREE ? 30 : 0; // Trees are tall, collision is at the base
+          const dx = pos.x - item.x;
+          const dy = pos.y - (item.y + dy_offset);
+          const dist = Math.hypot(dx, dy);
+          const min_dist = 15 + radius;
+          if (dist < min_dist && dist > 0.01) {
+            const overlap = min_dist - dist;
+            pos.x += (dx / dist) * overlap;
+            pos.y += (dy / dist) * overlap;
+          }
+        }
+      };
+      
+      checkCollision(this.trees, 20);
+      checkCollision(this.rocks, 15);
+      
       pos.x = Math.max(24, Math.min(3976, pos.x));
       pos.y = Math.max(24, Math.min(3976, pos.y));
     }

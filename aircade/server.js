@@ -155,6 +155,7 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Gameplay Events
   socket.on('createRoom', (data) => {
     const { playerName } = data;
     let roomCode = generateRoomCode();
@@ -220,6 +221,7 @@ io.on('connection', (socket) => {
         myId: socket.id
       });
 
+      // Notify others in room
       socket.to(code).emit('playerJoined', rooms[code].players[socket.id]);
       console.log(`${socket.id} joined room ${code}`);
     } else {
@@ -228,9 +230,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('scanLocal', () => {
-    const availableRoomCode = Object.keys(rooms).find(
-      code => Object.keys(rooms[code].players).length < 4
-    );
+    // Return the first available room (for seamless local feel)
+    const availableRoomCode = Object.keys(rooms).find(code => Object.keys(rooms[code].players).length < 4);
     if (availableRoomCode) {
       const host = Object.values(rooms[availableRoomCode].players).find(p => p.isHost);
       socket.emit('survivorFound', { roomCode: availableRoomCode, hostName: host?.name || 'Unknown' });
@@ -246,22 +247,25 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Gameplay Events
   socket.on('playerMove', (data) => {
     if (currentRoom && rooms[currentRoom] && rooms[currentRoom].players[socket.id]) {
       const p = rooms[currentRoom].players[socket.id];
       p.x = data.x;
       p.y = data.y;
       p.anim = data.anim;
+      // Broadcast to everyone else in the room
       socket.to(currentRoom).emit('playerMoved', { id: socket.id, x: p.x, y: p.y, anim: p.anim });
     }
   });
-
+  
   socket.on('resourceGathered', (data) => {
+    // data = { type: 'tree' | 'rock' | 'radio', x: 123, y: 123 }
     if (currentRoom) {
       socket.to(currentRoom).emit('resourceGathered', data);
     }
   });
-
+  
   socket.on('craftCampfire', (data) => {
     if (currentRoom) {
       socket.to(currentRoom).emit('craftCampfire', data);
@@ -273,11 +277,13 @@ io.on('connection', (socket) => {
     if (currentRoom && rooms[currentRoom]) {
       delete rooms[currentRoom].players[socket.id];
       socket.to(currentRoom).emit('playerLeft', socket.id);
-
+      
+      // If room is empty, delete it
       if (Object.keys(rooms[currentRoom].players).length === 0) {
         delete rooms[currentRoom];
         console.log(`Room ${currentRoom} deleted`);
       } else {
+        // If host left, reassign host (just pick the first one)
         const pList = Object.values(rooms[currentRoom].players);
         if (!pList.find(p => p.isHost)) {
           const newHost = pList[0];

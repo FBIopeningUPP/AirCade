@@ -8,24 +8,75 @@ export class MockBleTransport extends TransportInterface {
     this.role = null;
     this.peer_id = null;
     this.connected = false;
-    this.latency = 50;
-    this.packet_loss = 0.0;
-    this.dup_chance = 0.0;
-    this.reorder_chance = 0.0;
-    this.msg_log = [];
-    this._pending = [];
+    this.latency = 20;
     this.peers = new Map();
     this.hostSimulation = null;
     this._client_peer_id = null;
+    this._scanResolver = null;
+    this._connectResolver = null;
+    
+    // Setup BroadcastChannel for cross-tab communication!
+    this.channel = new BroadcastChannel('aircade_mock_ble');
+    this.channel.onmessage = (event) => this._onChannelMessage(event.data);
+    this.channelId = 'mock_' + Math.random().toString(36).substr(2, 9);
   }
 
-  async initialize() {}
+  async initialize() {
+    console.log('[MockBleTransport] Initialized on channel:', this.channelId);
+  }
+
+  _onChannelMessage(payload) {
+    if (payload.sender === this.channelId) return; // ignore own messages
+    if (payload.target && payload.target !== this.channelId) return; // ignore messages not for me
+    
+    if (payload.type === 'SCAN_REQ' && this.role === 'host') {
+      this.channel.postMessage({
+        sender: this.channelId,
+        target: payload.sender,
+        type: 'SCAN_RESP',
+        data: { device_id: this.channelId, name: 'Aircade-TEST', rssi: -40 }
+      });
+    }
+    else if (payload.type === 'SCAN_RESP' && this.role === 'client' && this._scanResolver) {
+      this._scanResolver(payload.data);
+      this._scanResolver = null;
+    }
+    else if (payload.type === 'CONNECT_REQ' && this.role === 'host') {
+      this._client_peer_id = payload.sender;
+      this.peers.set(this._client_peer_id, { id: this._client_peer_id, isHost: false });
+      
+      this.channel.postMessage({
+        sender: this.channelId,
+        target: payload.sender,
+        type: 'CONNECT_RESP',
+        data: { accepted: true }
+      });
+      
+      if (this.on_peer_connected) this.on_peer_connected(this._client_peer_id);
+    }
+    else if (payload.type === 'CONNECT_RESP' && this.role === 'client') {
+      if (payload.data.accepted && this._connectResolver) {
+        this.connected = true;
+        this.peer_id = this.channelId;
+        this.peers.set(this.channelId, { id: this.channelId, isHost: false });
+        this._connectResolver();
+        this._connectResolver = null;
+      }
+    }
+    else if (payload.type === 'DATA') {
+      if (this.connected) {
+        const u8 = new Uint8Array(payload.data);
+        this._recv(u8);
+      }
+    }
+  }
 
   async host(_opts) {
     this.role = 'host';
-    this.peer_id = 'host-' + Date.now();
+    this.peer_id = this.channelId;
     this.connected = true;
     this.peers.set(this.peer_id, { id: this.peer_id, isHost: true });
+    console.log('[MockBleTransport] Hosting as', this.peer_id);
   }
 
   setHostSimulation(sim) {
@@ -34,22 +85,37 @@ export class MockBleTransport extends TransportInterface {
 
   async scan() {
     this.role = 'client';
-    return { device_id: 'mock-host', name: 'Aircade-TEST', rssi: -40 };
+    return new Promise((resolve) => {
+      this._scanResolver = resolve;
+      this.channel.postMessage({ sender: this.channelId, target: null, type: 'SCAN_REQ' });
+      // Timeout if no host found
+      setTimeout(() => {
+        if (this._scanResolver) {
+          this._scanResolver(null);
+          this._scanResolver = null;
+        }
+      }, 3000);
+    });
   }
 
-  async connect(_device_id) {
-    this.connected = true;
-    this._client_peer_id = 'client-' + Date.now();
-    this.peer_id = this._client_peer_id;
-    this.peers.set(this._client_peer_id, { id: this._client_peer_id, isHost: false });
-    const join = this.codec.encode_join_req('Player');
-    setTimeout(() => this._recv(join), this.latency);
+  async connect(device_id) {
+    this.role = 'client';
+    this.host_device_id = device_id;
+    return new Promise((resolve, reject) => {
+      this._connectResolver = resolve;
+      this.channel.postMessage({ sender: this.channelId, target: device_id, type: 'CONNECT_REQ' });
+      setTimeout(() => {
+        if (this._connectResolver) {
+          reject(new Error("Connection timeout"));
+          this._connectResolver = null;
+        }
+      }, 3000);
+    });
   }
 
   async send_input(input) {
     if (!this.connected) return;
     const buf = this.codec.encode_input(input);
-    this.msg_log.push({ dir: 'out', type: 'INPUT', data: input, time: Date.now() });
     this._send(buf);
   }
 
@@ -57,59 +123,37 @@ export class MockBleTransport extends TransportInterface {
     if (!this.connected) return;
     let buf;
     switch (msg.type) {
-      case 'JOIN_REQ':
-        buf = this.codec.encode_join_req(msg.name);
-        break;
-      case 'PING':
-        buf = this.codec.encode_ping(msg.seq, msg.client_time);
-        break;
-      case 'SYNC_REQ':
-        buf = this.codec.encode_sync_req(msg.last_tick, msg.last_seq);
-        break;
-      default:
-        return;
+      case 'JOIN_REQ': buf = this.codec.encode_join_req(msg.name); break;
+      case 'PING': buf = this.codec.encode_ping(msg.seq, msg.client_time); break;
+      case 'SYNC_REQ': buf = this.codec.encode_sync_req(msg.last_tick, msg.last_seq); break;
+      default: return;
     }
-    this.msg_log.push({ dir: 'out', type: msg.type, data: msg, time: Date.now() });
     this._send(buf);
   }
 
   async broadcast_state(buf) {
     if (!this.connected || this.role !== 'host') return;
     for (const peer of this.peers.values()) {
-      if (!peer.isHost) {
-        this._sendToPeer(peer.id, buf);
-      }
+      if (!peer.isHost) this._sendToPeer(peer.id, buf);
     }
   }
 
   async broadcast_event(buf) {
     if (!this.connected || this.role !== 'host') return;
     for (const peer of this.peers.values()) {
-      if (!peer.isHost) {
-        this._sendToPeer(peer.id, buf);
-      }
+      if (!peer.isHost) this._sendToPeer(peer.id, buf);
     }
   }
 
   _sendToPeer(peerId, buf) {
-    if (Math.random() < this.packet_loss) return;
-    const delay = this.latency + (Math.random() * 20 - 10);
-    const deliver = () => {
-      if (Math.random() < this.dup_chance) this._recv(buf);
-      if (Math.random() < this.reorder_chance && this._pending.length) {
-        this._pending.push({ buf, t: Date.now() + delay });
-      } else {
-        this._recv(buf);
-      }
-    };
-    this._pending.push({ buf, t: Date.now() + delay });
     setTimeout(() => {
-      const idx = this._pending.findIndex(p => p.buf === buf);
-      if (idx >= 0) {
-        this._pending.splice(idx, 1);
-        deliver();
-      }
-    }, delay);
+      this.channel.postMessage({
+        sender: this.channelId,
+        target: peerId,
+        type: 'DATA',
+        data: Array.from(buf) // Convert Uint8Array to Array for serialization
+      });
+    }, this.latency);
   }
 
   async disconnect() {
@@ -120,12 +164,10 @@ export class MockBleTransport extends TransportInterface {
   _send(buf) {
     if (this.role === 'host') {
       for (const peer of this.peers.values()) {
-        if (!peer.isHost) {
-          this._sendToPeer(peer.id, buf);
-        }
+        if (!peer.isHost) this._sendToPeer(peer.id, buf);
       }
     } else {
-      this._sendToPeer(this._client_peer_id || this.peer_id, buf);
+      this._sendToPeer(this.host_device_id, buf);
     }
   }
 
@@ -133,7 +175,6 @@ export class MockBleTransport extends TransportInterface {
     if (!this.connected) return;
     try {
       const msg = this.codec.decode(buf);
-      this.msg_log.push({ dir: 'in', type: msg.type, data: msg, time: Date.now() });
       if (msg.type === 'SNAPSHOT' || msg.type === 'DELTA') {
         this.on_state_update?.(msg);
       } else if (msg.type === 'EVENT' || msg.type === 'JOIN_ACCEPT' || msg.type === 'PONG' || msg.type === 'SYNC_RESP') {
@@ -147,14 +188,13 @@ export class MockBleTransport extends TransportInterface {
         const senderId = this._client_peer_id;
         this.hostSimulation.handleSyncRequest(senderId);
       }
-    } catch {
+    } catch (e) {
+      console.error('[MockBle] Decode error', e);
     }
   }
 
   _handleJoinRequest(_msg) {
     if (!this._client_peer_id) return;
-    this.peers.set(this._client_peer_id, { id: this._client_peer_id, isHost: false });
-    if (this.on_peer_connected) this.on_peer_connected(this._client_peer_id);
     if (this.hostSimulation) {
       this.hostSimulation.addPlayer(this._client_peer_id);
       const playerIndex = this.hostSimulation.getPlayerIndex(this._client_peer_id);
@@ -163,38 +203,4 @@ export class MockBleTransport extends TransportInterface {
       this._sendToPeer(this._client_peer_id, buf);
     }
   }
-
-  simulate_snapshot(snap) {
-    const buf = this.codec.encode_snapshot(snap);
-    this._recv(buf);
-  }
-
-  simulate_event(evt) {
-    const buf = this.codec.encode_event(evt);
-    this._recv(buf);
-  }
-
-  simulate_join_accept(player_id, world_seed, snap) {
-    const buf = this.codec.encode_join_accept(player_id, world_seed, snap);
-    this._recv(buf);
-  }
-
-  simulate_pong(seq, server_time, client_time) {
-    const buf = this.codec.encode_pong(seq, server_time, client_time);
-    this._recv(buf);
-  }
-
-  simulate_sync_resp(snap) {
-    const buf = this.codec.encode_sync_resp(snap);
-    this._recv(buf);
-  }
-
-  set_net_cond(latency, loss, dup, reorder) {
-    this.latency = latency;
-    this.packet_loss = loss;
-    this.dup_chance = dup;
-    this.reorder_chance = reorder;
-  }
 }
-
-// TODO: add jitter simulation for connection interval variance

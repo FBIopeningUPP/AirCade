@@ -18,33 +18,45 @@ export class BleTransport extends TransportInterface {
     this._scan_timeout = null;
     this._listeners = new Map();
     this.ble = BluetoothLowEnergy;
+    this.hostSimulation = null;
+    this.connected_peers = new Set();
   }
 
   async initialize() {
     if (Capacitor.getPlatform() !== 'android' && Capacitor.getPlatform() !== 'ios') {
       throw new Error('BLE only supported on mobile');
     }
-    await this.ble.initialize();
+  }
+
+  async _ensurePermissions() {
+    const permissions = await this.ble.requestPermissions();
+    if (permissions.bluetooth !== 'granted') {
+      throw new Error('Bluetooth permissions denied');
+    }
   }
 
   async host(_opts) {
     this.role = 'host';
     this.peer_id = 'ble-host-' + Date.now();
 
+    await this.ble.initialize({ mode: 'peripheral' });
+    await this._ensurePermissions();
+
     await this.ble.addGattService({
       service: BLE.SERVICE_UUID,
       characteristics: [
         {
           uuid: BLE.CHAR_STATE_UUID,
-          properties: ['notify', 'read'],
+          properties: { broadcast: false, read: true, writeWithoutResponse: false, write: false, notify: true, indicate: false },
+          value: [0x00],
         },
         {
           uuid: BLE.CHAR_INPUT_UUID,
-          properties: ['write', 'writeWithoutResponse'],
+          properties: { broadcast: false, read: false, writeWithoutResponse: true, write: true, notify: false, indicate: false },
         },
         {
           uuid: BLE.CHAR_CONTROL_UUID,
-          properties: ['write', 'writeWithoutResponse'],
+          properties: { broadcast: false, read: false, writeWithoutResponse: true, write: true, notify: false, indicate: false },
         },
       ],
     });
@@ -53,51 +65,78 @@ export class BleTransport extends TransportInterface {
     this._input_char = BLE.CHAR_INPUT_UUID;
     this._control_char = BLE.CHAR_CONTROL_UUID;
 
-    this._listeners.set('charWrite', this.ble.addListener('characteristicWriteRequest', (event) => {
-      if (event.characteristic === BLE.CHAR_INPUT_UUID) {
+    let _writeListenerHandle = null;
+    this.ble.addListener('gattCharacteristicWriteRequest', (event) => {
+      if (event.characteristic.toLowerCase() === BLE.CHAR_INPUT_UUID.toLowerCase()) {
         const buf = new Uint8Array(event.value);
-        this._handleInput(buf);
-      } else if (event.characteristic === BLE.CHAR_CONTROL_UUID) {
+        this._handleInput(buf, event.deviceId);
+      } else if (event.characteristic.toLowerCase() === BLE.CHAR_CONTROL_UUID.toLowerCase()) {
         const buf = new Uint8Array(event.value);
-        this._handleControl(buf);
+        this._handleControl(buf, event.deviceId);
       }
-    }));
+    }).then(handle => { _writeListenerHandle = handle; this._listeners.set('charWrite', handle); });
 
-    this._listeners.set('notifyChanged', this.ble.addListener('characteristicNotifyChanged', (event) => {
-      if (event.enabled && event.characteristic === BLE.CHAR_STATE_UUID) {
-        this.connected = true;
-        this.on_peer_connected?.(this.peer_id);
-      }
-    }));
+    let _connectListenerHandle = null;
+    this.ble.addListener('centralConnected', (event) => {
+      this.connected = true;
+      this.connected_peers.add(event.deviceId);
+      this.on_peer_connected?.(event.deviceId);
+    }).then(handle => { _connectListenerHandle = handle; this._listeners.set('centralConn', handle); });
+
+    let _disconnectListenerHandle = null;
+    this.ble.addListener('centralDisconnected', (event) => {
+      this.connected_peers.delete(event.deviceId);
+      this.on_peer_disconnected?.(event.deviceId);
+    }).then(handle => { _disconnectListenerHandle = handle; this._listeners.set('centralDisconn', handle); });
 
     await this.ble.startAdvertising({
       serviceUuids: [BLE.SERVICE_UUID],
-      localName: 'Aircade',
+      name: 'Aircade',
     });
     this.connected = true;
   }
 
   async scan() {
     this.role = 'client';
+    await this.ble.initialize({ mode: 'central' });
+    await this._ensurePermissions();
+    
     return new Promise((resolve, reject) => {
       this._scan_timeout = setTimeout(() => {
         this.ble.stopScan();
         reject(new Error('scan timeout'));
       }, 10000);
 
-      const listener = this.ble.addListener('deviceScanned', (result) => {
-        if (result.device && result.device.name && result.device.name.includes('Aircade')) {
+      let listenerHandle = null;
+      this.ble.addListener('deviceScanned', (result) => {
+        if (!result.device) return;
+        
+        const name = result.device.name || '';
+        const hasName = name.toLowerCase().includes('aircade');
+        
+        let hasUuid = false;
+        if (result.device.serviceUuids) {
+          hasUuid = result.device.serviceUuids.some(u => 
+            u.toLowerCase() === BLE.SERVICE_UUID.toLowerCase() || 
+            u.toLowerCase() === '0xa1c0' || 
+            u.toLowerCase() === 'a1c0'
+          );
+        }
+
+        if (hasName || hasUuid) {
           clearTimeout(this._scan_timeout);
           this.ble.stopScan();
-          this.ble.removeListener(listener);
+          if (listenerHandle) listenerHandle.remove();
           this.device_id = result.device.deviceId;
-          resolve({ device_id: result.device.deviceId, name: result.device.name, rssi: result.device.rssi });
+          resolve({ device_id: result.device.deviceId, name: name || 'Aircade Host', rssi: result.device.rssi });
         }
+      }).then(handle => {
+        listenerHandle = handle;
+        this._listeners.set('scan', handle);
       });
-      this._listeners.set('scan', listener);
 
-      this.ble.requestLEScan({
-        services: [BLE.SERVICE_UUID],
+      // Scan for all devices, manually filter to avoid Android filter bugs
+      this.ble.startScan({
         allowDuplicates: false,
       });
     });
@@ -133,6 +172,11 @@ export class BleTransport extends TransportInterface {
         }
       }
     }
+    
+    if (!this._state_char || !this._input_char || !this._control_char) {
+      throw new Error('Bluetooth services missing. Please restart Bluetooth on both phones.');
+    }
+
     this.connected = true;
     this.peer_id = device_id;
     const join = this.codec.encode_join_req('Player');
@@ -166,27 +210,31 @@ export class BleTransport extends TransportInterface {
 
   async broadcast_state(buf) {
     if (!this.connected || this.role !== 'host' || !this._state_char) return;
+    const value = Array.from(buf);
     await this.ble.setGattCharacteristicValue({
       service: BLE.SERVICE_UUID,
       characteristic: this._state_char,
-      value: Array.from(buf),
+      value,
     });
     await this.ble.notifyGattCharacteristicChanged({
       service: BLE.SERVICE_UUID,
       characteristic: this._state_char,
+      value,
     });
   }
 
   async broadcast_event(buf) {
     if (!this.connected || this.role !== 'host' || !this._state_char) return;
+    const value = Array.from(buf);
     await this.ble.setGattCharacteristicValue({
       service: BLE.SERVICE_UUID,
       characteristic: this._state_char,
-      value: Array.from(buf),
+      value,
     });
     await this.ble.notifyGattCharacteristicChanged({
       service: BLE.SERVICE_UUID,
       characteristic: this._state_char,
+      value,
     });
   }
 
@@ -203,26 +251,30 @@ export class BleTransport extends TransportInterface {
     });
   }
 
-  _handleInput(buf) {
+  setHostSimulation(sim) {
+    this.hostSimulation = sim;
+  }
+
+  _handleInput(buf, senderId = 'client') {
+    if (!this.connected || !this.hostSimulation) return;
     try {
       const msg = this.codec.decode(buf);
       if (msg.type === 'INPUT') {
-        this.msg_log?.push({ dir: 'in', type: 'INPUT', data: msg, time: Date.now() });
+        this.hostSimulation.queueInput(senderId, msg);
       }
     } catch {
     }
   }
 
-  _handleControl(buf) {
+  _handleControl(buf, senderId = 'client') {
     try {
       const msg = this.codec.decode(buf);
-      this.msg_log?.push({ dir: 'in', type: msg.type, data: msg, time: Date.now() });
-      if (msg.type === 'JOIN_REQ') {
-        const peerId = 'ble-client-' + Date.now();
-        this.on_peer_connected?.(peerId);
-        const snap = { tick: 0, player_count: 1, local_player_id: 0, players: [], darkness_alpha: 0, campfires: [], last_ack_seq: 0 };
-        const buf2 = this.codec.encode_join_accept(peerId, Math.floor(Math.random() * 65536), snap);
-        this.broadcast_state(new Uint8Array(buf2));
+      if (msg.type === 'JOIN_REQ' && this.role === 'host') {
+        console.log('[BleTransport] Received JOIN_REQ from', senderId);
+        this.connected_peers.add(senderId);
+        this.on_peer_connected?.(senderId);
+      } else if (msg.type === 'SYNC_REQ' && this.hostSimulation) {
+        this.hostSimulation.handleSyncRequest(senderId);
       }
     } catch {
     }
@@ -232,7 +284,6 @@ export class BleTransport extends TransportInterface {
     if (!this.connected) return;
     try {
       const msg = this.codec.decode(buf);
-      this.msg_log?.push({ dir: 'in', type: msg.type, data: msg, time: Date.now() });
       if (msg.type === 'SNAPSHOT' || msg.type === 'DELTA') {
         this.on_state_update?.(msg);
       } else if (msg.type === 'EVENT' || msg.type === 'JOIN_ACCEPT' || msg.type === 'PONG' || msg.type === 'SYNC_RESP') {

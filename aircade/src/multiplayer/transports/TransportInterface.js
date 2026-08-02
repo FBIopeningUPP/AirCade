@@ -4,6 +4,23 @@ export class TransportInterface {
     this.onEvent = null;
     this.onPeerConnected = null;
     this.onPeerDisconnected = null;
+    this._eventListeners = new Map();
+  }
+
+  on(event, callback) {
+    if (!this._eventListeners.has(event)) {
+      this._eventListeners.set(event, []);
+    }
+    this._eventListeners.get(event).push(callback);
+  }
+
+  emit(event, ...args) {
+    const listeners = this._eventListeners.get(event);
+    if (listeners) {
+      for (const cb of listeners) {
+        cb(...args);
+      }
+    }
   }
 
   async initialize() { throw new Error('initialize not implemented'); }

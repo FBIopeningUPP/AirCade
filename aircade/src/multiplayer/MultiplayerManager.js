@@ -115,6 +115,19 @@ class MultiplayerManager {
     }
   }
 
+  _sendJoinAccept(peerId, snapshot) {
+    if (this.transport) {
+      if (typeof this.transport.send === 'function') {
+        const msg = { type: 'JOIN_ACCEPT', snapshot };
+        this.transport.send(peerId, msg);
+      } else if (typeof this.transport.broadcast_event === 'function' && this.hostSimulation) {
+        const playerIndex = this.hostSimulation.getPlayerIndex(peerId);
+        const buf = this.codec.encode_join_accept(playerIndex, this.hostSimulation.worldSeed || Math.floor(Math.random() * 65536), snapshot);
+        this.transport.broadcast_event(new Uint8Array(buf));
+      }
+    }
+  }
+
   _onPeerDisconnected(peerId) {
     console.log('[MultiplayerManager] Peer disconnected:', peerId);
     if (this.isHost) {
@@ -260,7 +273,10 @@ class MultiplayerManager {
   async _startHostSimulation() {
     if (this.hostSimulation) return;
     const { HostSimulation } = await import('./HostSimulation');
-    this.hostSimulation = new HostSimulation(this.transport, this.codec, this.worldSeed || Math.floor(Math.random() * 65536));
+    if (this.worldSeed == null) {
+      this.worldSeed = Math.floor(Math.random() * 65536);
+    }
+    this.hostSimulation = new HostSimulation(this.transport, this.codec, this.worldSeed);
     this.transport.setHostSimulation(this.hostSimulation);
     this.hostSimulation.start();
   }
