@@ -24,6 +24,7 @@ export class HostSimulation {
     this.playerVelocities = new Map();
     this.playerHealth = new Map();
     this.playerInventories = new Map();
+    this.numericIds = new Map();
     this.entityTypes = {
       TREE: 0,
       ROCK: 1,
@@ -32,8 +33,8 @@ export class HostSimulation {
     };
     this.gatherRadius = 80;
     this.campfireWarmRadius = 150;
-    this.darknessDamageInterval = 3000;
-    this.lastDarknessDamage = 0;
+    this.darknessDamageIntervalTicks = 3000 / this.tickMs;
+    this.lastDarknessDamageTick = 0;
     this.winRadioCount = 3;
   }
 
@@ -57,19 +58,19 @@ export class HostSimulation {
 
   _generateWorld() {
     const rng = this._seededRandom(this.worldSeed);
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 150; i++) {
       const id = this.nextEntityId++;
       const x = Math.floor(rng() * 3800) + 100;
       const y = Math.floor(rng() * 3800) + 100;
       this.trees.set(id, { id, x, y, active: true, type: this.entityTypes.TREE });
     }
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 100; i++) {
       const id = this.nextEntityId++;
       const x = Math.floor(rng() * 3800) + 100;
       const y = Math.floor(rng() * 3800) + 100;
       this.rocks.set(id, { id, x, y, active: true, type: this.entityTypes.ROCK });
     }
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
       const id = this.nextEntityId++;
       const x = Math.floor(rng() * 3800) + 100;
       const y = Math.floor(rng() * 3800) + 100;
@@ -95,11 +96,18 @@ export class HostSimulation {
 
   _processInputs() {
     for (const [playerId, inputs] of this.inputBuffers) {
-      if (inputs.length === 0) continue;
-      const input = inputs.shift();
+      if (inputs.length === 0) {
+        this.playerVelocities.set(playerId, { vx: 0, vy: 0 });
+        continue;
+      }
+      // Consume all pending inputs and apply the latest
+      let lastInput = null;
+      while (inputs.length > 0) {
+        lastInput = inputs.shift();
+      }
       const player = this.players.get(playerId);
       if (!player) continue;
-      this._applyInput(playerId, input);
+      this._applyInput(playerId, lastInput);
     }
   }
 
@@ -108,13 +116,10 @@ export class HostSimulation {
     const dt = this.tickMs / 1000;
     const vx = input.joy_x * speed;
     const vy = input.joy_y * speed;
+    if (vx !== 0 || vy !== 0) {
+      console.log(`[HostSimulation] _applyInput: playerId=${playerId}, joy_x=${input.joy_x}, vx=${vx}, dt=${dt}`);
+    }
     this.playerVelocities.set(playerId, { vx, vy });
-    const pos = this.playerPositions.get(playerId) || { x: 400, y: 300 };
-    pos.x += vx * dt;
-    pos.y += vy * dt;
-    pos.x = Math.max(24, Math.min(3976, pos.x));
-    pos.y = Math.max(24, Math.min(3976, pos.y));
-    this.playerPositions.set(playerId, pos);
     if (input.flags & BLE.INPUT_FLAGS.CHOP) {
       this._tryGather(playerId, input.target_id, input.target_type);
     }
@@ -206,22 +211,27 @@ export class HostSimulation {
     for (const [playerId, vel] of this.playerVelocities) {
       const pos = this.playerPositions.get(playerId);
       if (!pos) continue;
+      if (vel.vx !== 0 || vel.vy !== 0) {
+        console.log(`[HostSimulation] _updatePhysics: playerId=${playerId}, pos before=(${pos.x}, ${pos.y}), vx=${vel.vx}`);
+      }
       pos.x += vel.vx * (this.tickMs / 1000);
       pos.y += vel.vy * (this.tickMs / 1000);
       
       const checkCollision = (group, radius) => {
         for (const item of group.values()) {
           if (!item.active) continue;
-          // For trees, adjust visual center vs hitbox center if needed. Assuming item.x/y is center.
-          const dy_offset = item.type === this.entityTypes.TREE ? 30 : 0; // Trees are tall, collision is at the base
+          const cf_r = 20;
+          const dy_offset = item.type === this.entityTypes.TREE ? 30 : 0;
           const dx = pos.x - item.x;
           const dy = pos.y - (item.y + dy_offset);
+          const min_dist = (cf_r + p_r) * 0.9;
           const dist = Math.hypot(dx, dy);
-          const min_dist = 15 + radius;
-          if (dist < min_dist && dist > 0.01) {
-            const overlap = min_dist - dist;
-            pos.x += (dx / dist) * overlap;
-            pos.y += (dy / dist) * overlap;
+          if (dist < min_dist) {
+            const push = min_dist - dist;
+            const pdx = dist === 0 ? 1 : dx / dist;
+            const pdy = dist === 0 ? 0 : dy / dist;
+            pos.x += pdx * push;
+            pos.y += pdy * push;
           }
         }
       };
@@ -235,15 +245,11 @@ export class HostSimulation {
   }
 
   _updateDarkness() {
-    // 3 minute cycle (180s = 3600 ticks at 20 ticks/sec).
-    // Start at -PI/2 (peak day)
     const cycle = Math.sin((this.currentTick / 3600) * Math.PI * 2 - Math.PI / 2);
-    // Map -1..1 to 0..0.85
     this.darknessAlpha = Math.max(0, cycle) * 0.85;
 
-    const now = Date.now();
-    if (now - this.lastDarknessDamage >= this.darknessDamageInterval) {
-      this.lastDarknessDamage = now;
+    if (this.currentTick - this.lastDarknessDamageTick > this.darknessDamageIntervalTicks) {
+      this.lastDarknessDamageTick = this.currentTick;
       for (const [playerId, pos] of this.playerPositions) {
         let isWarm = false;
         for (const campfire of this.campfires.values()) {
@@ -264,7 +270,7 @@ export class HostSimulation {
           this.playerHealth.set(playerId, newHealth);
           this._broadcastEvent({
             evt_type: BLE.EVENT_TYPES.DAMAGE,
-            player_id: playerId,
+            player_id: this.numericIds.get(playerId) || 0,
             new_health: Math.max(0, newHealth),
           });
           if (newHealth <= 0) {
@@ -276,7 +282,7 @@ export class HostSimulation {
           this.playerHealth.set(playerId, newHealth);
           this._broadcastEvent({
             evt_type: BLE.EVENT_TYPES.DAMAGE,
-            player_id: playerId,
+            player_id: this.numericIds.get(playerId) || 0,
             new_health: newHealth,
           });
         }
@@ -291,9 +297,10 @@ export class HostSimulation {
     this.playerInventories.delete(playerId);
     this.players.delete(playerId);
     this.inputBuffers.delete(playerId);
+    this.numericIds.delete(playerId);
     this._broadcastEvent({
       evt_type: BLE.EVENT_TYPES.PLAYER_LEFT,
-      player_id: playerId,
+      player_id: this.numericIds.get(playerId) || 0,
     });
   }
 
@@ -349,9 +356,11 @@ export class HostSimulation {
     this.playerVelocities.set(playerId, { vx: 0, vy: 0 });
     this.playerHealth.set(playerId, 100);
     this.playerInventories.set(playerId, { wood: 0, stone: 0, radio: 0 });
+    const numId = this.nextPlayerId++;
+    this.numericIds.set(playerId, numId);
     this._broadcastEvent({
       evt_type: BLE.EVENT_TYPES.PLAYER_JOINED,
-      player_id: playerId,
+      player_id: numId,
     });
     return true;
   }
@@ -364,6 +373,9 @@ export class HostSimulation {
 
   queueInput(playerId, input) {
     const buffer = this.inputBuffers.get(playerId);
+    if (input.joy_x !== 0 || input.joy_y !== 0) {
+      console.log(`[HostSimulation] queueInput for ${playerId}, buffer exists: ${!!buffer}, joy_x: ${input.joy_x}`);
+    }
     if (buffer) {
       buffer.push(input);
     }
@@ -382,8 +394,9 @@ export class HostSimulation {
       const vel = this.playerVelocities.get(playerId) || { vx: 0, vy: 0 };
       const health = this.playerHealth.get(playerId) || 100;
       const inv = this.playerInventories.get(playerId) || { wood: 0, stone: 0, radio: 0 };
+      const numId = this.numericIds.get(playerId) || 0;
       players.push({
-        id: playerId,
+        id: numId,
         x: pos.x,
         y: pos.y,
         vx: vel.vx,

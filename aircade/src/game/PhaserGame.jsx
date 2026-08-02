@@ -31,8 +31,9 @@ export default function PhaserGame({ gameRef, socket, roomData }) {
 
     return () => {
       game.destroy(true);
+      if (gameRef) gameRef.current = null;
     };
-  }, [gameRef, socket, roomData]);
+  }, [gameRef, socket]);
 
   return <div id="phaser-container" className={`fade-wrapper`} style={{ width: '100vw', height: '100vh', position: 'absolute', top: 0, left: 0 }} />;
 }

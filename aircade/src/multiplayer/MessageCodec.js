@@ -14,7 +14,8 @@ export class MessageCodec {
     w.u8(input.flags);
     w.i16(input.joy_x);
     w.i16(input.joy_y);
-    w.u8((input.target_id << 3) | input.target_type);
+    w.u8(input.target_id);
+    w.u8(input.target_type);
     return w.done();
   }
 
@@ -48,7 +49,8 @@ export class MessageCodec {
     const w = new BinWriter(this.max_pkt);
     w.u8(BLE.MSG_TYPES.SNAPSHOT);
     w.u16(snap.tick);
-    w.u8((snap.player_count << 6) | (snap.local_player_id & 0x3));
+    w.u8(snap.player_count);
+    w.u8(snap.local_player_id);
 
     for (const p of snap.players) {
       w.u8(p.id);
@@ -79,7 +81,8 @@ export class MessageCodec {
     w.u16(delta.tick);
     w.u8(delta.changes.length);
     for (const ch of delta.changes) {
-      w.u8((ch.entity_type << 6) | (ch.entity_id & 0x3f));
+      w.u8(ch.entity_type);
+      w.u16(ch.entity_id);
       w.u8(ch.flags);
       if (ch.has_pos) {
         const pos = packPos(ch.x, ch.y);
@@ -97,7 +100,8 @@ export class MessageCodec {
     w.u8(evt.player_id);
     switch (evt.evt_type) {
       case BLE.EVENT_TYPES.GATHER:
-        w.u8((evt.target_id << 3) | evt.item_id);
+        w.u16(evt.target_id);
+        w.u8(evt.item_id);
         w.u8(evt.qty);
         break;
       case BLE.EVENT_TYPES.CRAFT:
@@ -178,11 +182,13 @@ export class MessageCodec {
       flags: r.u8(),
       joy_x: r.i16(),
       joy_y: r.i16(),
-      target: r.u8(),
+      target_id: r.u8(),
+      target_type: r.u8(),
     };
   }
 
   _dec_join_req(r) {
+    r.u16(); // Padding
     const len = r.u8();
     const name = new TextDecoder().decode(r.bytes(len));
     return { type: 'JOIN_REQ', name };
@@ -198,9 +204,8 @@ export class MessageCodec {
 
   _dec_snapshot(r) {
     const tick = r.u16();
-    const pc = r.u8();
-    const player_count = pc >> 6;
-    const local_player_id = pc & 0x3;
+    const player_count = r.u8();
+    const local_player_id = r.u8();
     const players = [];
     for (let i = 0; i < player_count; i++) {
       const id = r.u8();
@@ -225,14 +230,24 @@ export class MessageCodec {
         },
       });
     }
+
+    const darkness_alpha = r.u8();
+    const campfires = [];
+    const campfire_count = r.u8();
+    for (let i = 0; i < campfire_count; i++) {
+      const pos = (r.u8() << 16) | (r.u8() << 8) | r.u8();
+      const active = r.u8() === 1;
+      campfires.push({ ...unpackPos(pos), active });
+    }
+
     return {
       type: 'SNAPSHOT',
       tick,
       player_count,
       local_player_id,
       players,
-      darkness_alpha: r.u8(),
-      campfires: [],
+      darkness_alpha,
+      campfires,
       last_ack_seq: r.u16(),
     };
   }
@@ -242,7 +257,8 @@ export class MessageCodec {
     const count = r.u8();
     const changes = [];
     for (let i = 0; i < count; i++) {
-      const et = r.u8();
+      const entity_type = r.u8();
+      const entity_id = r.u16();
       const flags = r.u8();
       const has_pos = (flags & 0x80) !== 0;
       let x = 0, y = 0;
@@ -251,8 +267,8 @@ export class MessageCodec {
         ({ x, y } = unpackPos(pos));
       }
       changes.push({
-        entity_type: et >> 6,
-        entity_id: et & 0x3f,
+        entity_type: entity_type,
+        entity_id: entity_id,
         flags: flags & 0x7f,
         has_pos, x, y,
       });
@@ -266,9 +282,8 @@ export class MessageCodec {
     let evt = { type: 'EVENT', evt_type, player_id };
     switch (evt_type) {
       case BLE.EVENT_TYPES.GATHER:
-        const t = r.u8();
-        evt.target_id = t >> 3;
-        evt.item_id = t & 0x7;
+        evt.target_id = r.u16();
+        evt.item_id = r.u8();
         evt.qty = r.u8();
         break;
       case BLE.EVENT_TYPES.CRAFT:

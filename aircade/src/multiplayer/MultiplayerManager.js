@@ -16,7 +16,7 @@ class MultiplayerManager {
     this.localTick = 0;
     this.lastAckSeq = 0;
     this.lastAckTick = 0;
-    this.inputQueue = [];
+    this.pendingInput = this._getDefaultInput();
     this.maxQueueSize = 60;
     this.tickInterval = null;
     this.pingInterval = null;
@@ -73,6 +73,8 @@ class MultiplayerManager {
     this.isHost = true;
     this._emitConnectionChange('connecting');
     await this.transport.host({});
+    this.connected = true;
+    this._emitConnectionChange('connected');
     await this._startHostSimulation();
     this._startTickLoop();
   }
@@ -101,7 +103,7 @@ class MultiplayerManager {
     this.localTick = 0;
     this.lastAckSeq = 0;
     this.lastAckTick = 0;
-    this.inputQueue = [];
+    this.pendingInput = this._getDefaultInput();
     this.pendingPings.clear();
     this._emitConnectionChange('disconnected');
   }
@@ -133,7 +135,9 @@ class MultiplayerManager {
   _onPeerDisconnected(peerId) {
     console.log('[MultiplayerManager] Peer disconnected:', peerId);
     if (this.isHost) {
-      this._stopHostSimulation();
+      if (this.hostSimulation) {
+        this.hostSimulation.removePlayer(peerId);
+      }
     } else {
       this._scheduleReconnect();
     }
@@ -148,7 +152,10 @@ class MultiplayerManager {
     console.log(`[MultiplayerManager] Reconnecting... attempt ${this.reconnectAttempts}`);
     setTimeout(() => {
       if (this.role === 'client' && this.transport) {
-        this.transport.connect(this.transport.peer_id);
+        this.transport.connect(this.transport.peer_id).catch(err => {
+          console.error('[MultiplayerManager] Reconnect failed:', err);
+          this._emitError(err);
+        });
         setTimeout(() => this.requestSync(), 100);
       }
     }, this.reconnectDelay * this.reconnectAttempts);
@@ -187,9 +194,14 @@ class MultiplayerManager {
 
   _sendInput() {
     if (!this.connected || !this.transport) return;
-    const input = this.inputQueue.shift() || this._getDefaultInput();
+    const input = { ...this.pendingInput };
+    // Clear transient flags after sending
+    this.pendingInput.flags = 0;
+    this.pendingInput.target_id = 0;
+    this.pendingInput.target_type = 0;
     input.seq = this.localSeq++;
     input.tick = this.localTick;
+    console.log(`[MM] _sendInput: isHost=${this.isHost}, playerId=${this.playerId}, joy_x=${input.joy_x}, obj=`, input);
     if (this.isHost && this.hostSimulation) {
       this.hostSimulation.queueInput(this.playerId, input);
     } else {
@@ -208,10 +220,13 @@ class MultiplayerManager {
   }
 
   queueInput(input) {
-    if (this.inputQueue.length >= this.maxQueueSize) {
-      this.inputQueue.shift();
+    this.pendingInput.joy_x = input.joy_x;
+    this.pendingInput.joy_y = input.joy_y;
+    this.pendingInput.flags |= input.flags;
+    if (input.target_id) {
+      this.pendingInput.target_id = input.target_id;
+      this.pendingInput.target_type = input.target_type;
     }
-    this.inputQueue.push(input);
   }
 
   _sendPing() {
@@ -219,6 +234,12 @@ class MultiplayerManager {
     const seq = this.pingSeq++;
     const clientTime = Date.now();
     this.pendingPings.set(seq, clientTime);
+    
+    // Cleanup old pings
+    for (const [k, v] of this.pendingPings.entries()) {
+      if (clientTime - v > 10000) this.pendingPings.delete(k);
+    }
+
     this.transport.send_control({ type: 'PING', seq, client_time: clientTime });
   }
 
@@ -303,7 +324,7 @@ class MultiplayerManager {
       localTick: this.localTick,
       lastAckSeq: this.lastAckSeq,
       lastAckTick: this.lastAckTick,
-      queueLength: this.inputQueue.length,
+      queueLength: 0,
     };
   }
 }

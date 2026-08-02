@@ -32,13 +32,13 @@ export class BinReader {
 }
 
 export function packPos(x, y) {
-  const xi = Math.max(0, Math.min(4095, Math.round(x * 10)));
-  const yi = Math.max(0, Math.min(4095, Math.round(y * 10)));
+  const xi = Math.max(0, Math.min(4095, Math.round(x)));
+  const yi = Math.max(0, Math.min(4095, Math.round(y)));
   return (xi << 12) | yi;
 }
 
 export function unpackPos(p) {
-  return { x: (p >> 12) / 10, y: (p & 0xFFF) / 10 };
+  return { x: p >> 12, y: p & 0xFFF };
 }
 
 // console.log('packPos test', packPos(400, 300), unpackPos(packPos(400, 300)));

@@ -167,6 +167,8 @@ export class MockBleTransport extends TransportInterface {
   async disconnect() {
     this.connected = false;
     if (this.on_peer_disconnected) this.on_peer_disconnected(this.peer_id);
+    this.peers.clear();
+    if (this.channel) this.channel.close();
   }
 
   _send(buf) {
@@ -204,7 +206,7 @@ export class MockBleTransport extends TransportInterface {
   _handleJoinRequest(msg) {
     if (!this._client_peer_id) return;
     if (this.hostSimulation) {
-      this.hostSimulation.addPlayer(this._client_peer_id);
+      // Player already added in CONNECT_REQ via on_peer_connected
       const playerIndex = this.hostSimulation.getPlayerIndex(this._client_peer_id);
       const snap = this.hostSimulation.getSnapshot(this._client_peer_id);
       const buf = this.codec.encode_join_accept(playerIndex, this.hostSimulation.worldSeed || Math.floor(Math.random() * 65536), snap);

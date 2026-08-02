@@ -18,6 +18,7 @@ export class BleTransport extends TransportInterface {
     this._scan_timeout = null;
     this._listeners = new Map();
     this.ble = BluetoothLowEnergy;
+    this.connected_peers = new Set();
   }
 
   async initialize() {
@@ -72,18 +73,18 @@ export class BleTransport extends TransportInterface {
         const buf = new Uint8Array(event.value);
         this._handleControl(buf, event.deviceId);
       }
-    }).then(handle => { writeListenerHandle = handle; this._listeners.set('charWrite', handle); });
+    }).then(handle => { writeListenerHandle = handle; this._listeners.set('charWrite', handle); }).catch(console.error);
 
     let connectListenerHandle = null;
     this.ble.addListener('centralConnected', (event) => {
       this.connected = true;
       this.on_peer_connected?.(event.deviceId);
-    }).then(handle => { connectListenerHandle = handle; this._listeners.set('centralConn', handle); });
+    }).then(handle => { connectListenerHandle = handle; this._listeners.set('centralConn', handle); }).catch(console.error);
 
     let disconnectListenerHandle = null;
     this.ble.addListener('centralDisconnected', (event) => {
       this.on_peer_disconnected?.(event.deviceId);
-    }).then(handle => { disconnectListenerHandle = handle; this._listeners.set('centralDisconn', handle); });
+    }).then(handle => { disconnectListenerHandle = handle; this._listeners.set('centralDisconn', handle); }).catch(console.error);
 
     await this.ble.startAdvertising({
       services: [BLE.SERVICE_UUID],
@@ -98,7 +99,9 @@ export class BleTransport extends TransportInterface {
     await this._ensurePermissions();
     
     return new Promise((resolve, reject) => {
+      this._scan_reject = reject;
       this._scan_timeout = setTimeout(() => {
+        this._scan_reject = null;
         this.ble.stopScan();
         reject(new Error('scan timeout - no devices found within 15 seconds'));
       }, 15000);
@@ -108,6 +111,7 @@ export class BleTransport extends TransportInterface {
         if (!result.device) return;
         
         clearTimeout(this._scan_timeout);
+        this._scan_reject = null;
         this.ble.stopScan();
         if (listenerHandle) listenerHandle.remove();
         this.device_id = result.device.deviceId;
@@ -115,7 +119,7 @@ export class BleTransport extends TransportInterface {
       }).then(handle => {
         listenerHandle = handle;
         this._listeners.set('scan', handle);
-      });
+      }).catch(console.error);
 
       this.ble.startScan({
         services: [BLE.SERVICE_UUID],
@@ -180,13 +184,13 @@ export class BleTransport extends TransportInterface {
               service: this._actual_service_uuid,
               characteristic: this._state_char,
             });
-            const listener = this.ble.addListener('characteristicChanged', (val) => {
+            const listener = await this.ble.addListener('characteristicChanged', (val) => {
               if (val.deviceId === device_id && val.characteristic === this._state_char) {
                 const buf = new Uint8Array(val.value);
                 this._recv(buf);
               }
-            });
-            this._listeners.set('notifications', listener);
+            }).catch(console.error);
+            if (listener) this._listeners.set('notifications', listener);
           } else if (char.uuid.toLowerCase() === BLE.CHAR_INPUT_UUID.toLowerCase()) {
             this._input_char = char.uuid;
           } else if (char.uuid.toLowerCase() === BLE.CHAR_CONTROL_UUID.toLowerCase()) {
@@ -334,9 +338,18 @@ export class BleTransport extends TransportInterface {
       await this.ble.stopAdvertising();
       await this.ble.removeGattService({ service: BLE.SERVICE_UUID });
     } else if (this.role === 'client' && this.device_id) {
-      await this.ble.disconnect({ deviceId: this.device_id });
+      await this.ble.disconnect({ deviceId: this.device_id }).catch(() => {});
     }
-    if (this._scan_timeout) clearTimeout(this._scan_timeout);
+    if (this._scan_timeout) {
+      clearTimeout(this._scan_timeout);
+      this._scan_timeout = null;
+    }
+    if (this._scan_reject) {
+      this._scan_reject(new Error('Scan cancelled'));
+      this._scan_reject = null;
+    }
+    await this.ble.stopScan().catch(() => {});
+    
     for (const [_key, listener] of this._listeners) {
       this.ble.removeListener(listener);
     }

@@ -3,6 +3,7 @@ import PhaserGame from './game/PhaserGame';
 import MobileControls from './components/MobileControls';
 import './index.css';
 import { multiplayerManager } from './multiplayer/MultiplayerManager';
+import { Capacitor } from '@capacitor/core';
 
 let audioCtx = null;
 
@@ -67,7 +68,7 @@ export default function App() {
   const [tutorialState, setTutorialState] = useState('visible');
   const [day, setDay] = useState(1);
   const [dayFlash, setDayFlash] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768 || 'ontouchstart' in window);
+  const [isMobile, setIsMobile] = useState(Capacitor.isNativePlatform());
   const [typedTutorial, setTypedTutorial] = useState('');
   
   const [socket, setSocket] = useState(null);
@@ -97,7 +98,15 @@ export default function App() {
     }
   }, [fadeState, pendingState]);
 
+  const gameStateRef = useRef(gameState);
   useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
+  useEffect(() => {
+    let errorTimer = null;
+    let disconnectTimer = null;
+    
     multiplayerManager.setCallbacks({
       onStateUpdate: (snap) => {
         if (gameRef.current) {
@@ -111,18 +120,22 @@ export default function App() {
       },
       onConnectionChange: (state) => {
         if (state === 'connected') {
-          // Immediately enter playing state when fully connected via BLE
-          changeGameState('playing');
+          // Immediately enter playing state when fully connected via BLE for clients
+          if (!multiplayerManager.isHost) {
+            changeGameState('playing');
+          }
         } else if (state === 'disconnected') {
           setErrorMsg('Disconnected');
           changeGameState('menu');
-          setTimeout(() => setErrorMsg(''), 3000);
+          if (disconnectTimer) clearTimeout(disconnectTimer);
+          disconnectTimer = setTimeout(() => setErrorMsg(''), 3000);
         }
       },
       onError: (err) => {
         setErrorMsg(err.message || 'Network error');
-        if (gameState === 'scanning') changeGameState('menu');
-        setTimeout(() => setErrorMsg(''), 8000);
+        if (gameStateRef.current === 'scanning') changeGameState('menu');
+        if (errorTimer) clearTimeout(errorTimer);
+        errorTimer = setTimeout(() => setErrorMsg(''), 8000);
       }
     });
 
@@ -138,6 +151,9 @@ export default function App() {
     
     return () => {
       clearInterval(interval);
+      if (errorTimer) clearTimeout(errorTimer);
+      if (disconnectTimer) clearTimeout(disconnectTimer);
+      multiplayerManager.setCallbacks({ onStateUpdate: null, onEvent: null, onConnectionChange: null, onError: null });
       multiplayerManager.disconnect();
     };
   }, []);
@@ -165,11 +181,15 @@ export default function App() {
   useEffect(() => {
     if (gameState !== 'playing') return;
 
+    let shiverTimer = null;
+    let dayFlashTimer = null;
+
     const handleUpdateHUD = (data) => {
       setHudState(prev => {
         if (data.health < prev.health) {
           setIsShivering(true);
-          setTimeout(() => setIsShivering(false), 500);
+          if (shiverTimer) clearTimeout(shiverTimer);
+          shiverTimer = setTimeout(() => setIsShivering(false), 500);
         }
         return data;
       });
@@ -186,7 +206,8 @@ export default function App() {
     const handleNewDay = (newDayCount) => {
       setDay(newDayCount);
       setDayFlash(true);
-      setTimeout(() => setDayFlash(false), 2000);
+      if (dayFlashTimer) clearTimeout(dayFlashTimer);
+      dayFlashTimer = setTimeout(() => setDayFlash(false), 2000);
     };
 
     let gameInstance = null;
@@ -204,11 +225,15 @@ export default function App() {
 
     return () => {
       clearInterval(checkGame);
-      if (gameInstance) {
-        gameInstance.events.off('updateHUD', handleUpdateHUD);
-        gameInstance.events.off('gameOver', handleGameOver);
-        gameInstance.events.off('gameWon', handleGameWon);
-        gameInstance.events.off('newDay', handleNewDay);
+      if (shiverTimer) clearTimeout(shiverTimer);
+      if (dayFlashTimer) clearTimeout(dayFlashTimer);
+      // Clean up using current gameRef just in case gameInstance is stale
+      const gameToClean = gameInstance || gameRef.current;
+      if (gameToClean) {
+        gameToClean.events.off('updateHUD', handleUpdateHUD);
+        gameToClean.events.off('gameOver', handleGameOver);
+        gameToClean.events.off('gameWon', handleGameWon);
+        gameToClean.events.off('newDay', handleNewDay);
       }
     };
   }, [gameState]);
@@ -258,8 +283,10 @@ export default function App() {
           changeGameState('menu');
         }
       } catch (e) {
-        setErrorMsg(e.message || 'Scan failed');
-        changeGameState('menu');
+        if (e.message !== 'Scan cancelled') {
+          setErrorMsg(e.message || 'Scan failed');
+          changeGameState('menu');
+        }
       }
     } else {
       setErrorMsg('Please enter a name first');
@@ -362,7 +389,7 @@ export default function App() {
             <button 
               className="retro-button"
               onMouseEnter={playBlip}
-              onClick={() => { playSelect(); changeGameState('menu'); }}
+              onClick={() => { playSelect(); multiplayerManager.disconnect(); changeGameState('menu'); }}
               style={{ fontSize: '20px', marginTop: '20px' }}
             >
               CANCEL
@@ -471,7 +498,7 @@ export default function App() {
           onMouseEnter={playBlip}
           onClick={() => {
             playSelect();
-            if (gameRef.current) gameRef.current.events.emit('restartGame');
+            if (gameRef.current) gameRef.current.events?.emit('restartGame');
             setDay(1);
             setGameState('playing');
           }}

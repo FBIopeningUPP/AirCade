@@ -22,7 +22,6 @@ export default class GameScene extends Phaser.Scene {
   }
 
   create() {
-    window.__debugGameScene = this;
     this.scale.resize(window.innerWidth, window.innerHeight);
 
     this.health = 100;
@@ -44,8 +43,24 @@ export default class GameScene extends Phaser.Scene {
 
     // Draw the island without generating a massive texture to prevent WebGL crash on mobile
     const bgGraphics = this.add.graphics();
-    bgGraphics.fillStyle(0x76b852, 1);
+    
+    // Ice shore (light blue border)
+    bgGraphics.fillStyle(0xdcf3ff, 1);
+    bgGraphics.fillRoundedRect(-100, -100, 4200, 4200, 250);
+    
+    // Snowy ground
+    bgGraphics.fillStyle(0xf4faff, 1);
     bgGraphics.fillRoundedRect(0, 0, 4000, 4000, 200);
+
+    // Ice patches for texture
+    bgGraphics.fillStyle(0xe8f4f8, 0.7);
+    for (let i = 0; i < 50; i++) {
+      const px = Math.random() * 3800 + 100;
+      const py = Math.random() * 3800 + 100;
+      const rad = 50 + Math.random() * 150;
+      bgGraphics.fillCircle(px, py, rad);
+    }
+
     bgGraphics.setDepth(-10);
 
 
@@ -105,6 +120,13 @@ export default class GameScene extends Phaser.Scene {
     }).setDepth(150);
     this.snowEmitter.startFollow(this.cameras.main);
 
+    // QoL: Highlight for interactable items
+    this.itemHighlight = this.add.graphics();
+    this.itemHighlight.lineStyle(2, 0xffffff, 0.8);
+    this.itemHighlight.strokeCircle(0, 0, 24);
+    this.itemHighlight.setDepth(1000);
+    this.itemHighlight.setVisible(false);
+
     this.wasd = this.input.keyboard.addKeys('W,S,A,D');
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
@@ -137,8 +159,6 @@ export default class GameScene extends Phaser.Scene {
     // blackBg texture removed to prevent WebGL crash on mobile
 
     this.darknessLayer = this.add.renderTexture(0, 0, this.scale.width, this.scale.height).setDepth(100).setAlpha(0).setScrollFactor(0);
-
-    this.debugText = this.add.text(10, 10, 'Waiting for state...', { fontSize: '16px', color: '#ff0', backgroundColor: '#000' }).setScrollFactor(0).setDepth(9999);
 
     const dummySound = { volume: 0, play: () => {}, destroy: () => {} };
     try {
@@ -177,26 +197,68 @@ export default class GameScene extends Phaser.Scene {
     let nextEntityId = 1;
     const entityTypes = { TREE: 0, ROCK: 1, RADIO: 2 };
 
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 150; i++) {
       const id = nextEntityId++;
       const x = Math.floor(rng() * 3800) + 100;
       const y = Math.floor(rng() * 3800) + 100;
-      const sprite = this.add.image(x, y, 'tree').setDisplaySize(64, 128).setDepth(y);
+      
+      const h1 = (id * 1234567) % 100 / 100;
+      const h2 = (id * 7654321) % 100 / 100;
+      const h3 = (id * 1357924) % 100 / 100;
+      const h4 = (id * 9753124) % 100 / 100;
+      
+      const scale = 0.8 + h1 * 0.4;
+      const r = 200 + Math.floor(h2 * 55);
+      const g = 200 + Math.floor(h3 * 55);
+      const b = 200 + Math.floor(h4 * 55);
+      const color = (r << 16) | (g << 8) | b;
+      
+      const sprite = this.add.image(x, y, 'tree')
+        .setDisplaySize(64 * scale, 128 * scale)
+        .setTint(color)
+        .setDepth(y);
       this.trees.set(id, { id, type: entityTypes.TREE, x, y, sprite });
     }
-    for (let i = 0; i < 15; i++) {
+    
+    for (let i = 0; i < 100; i++) {
       const id = nextEntityId++;
       const x = Math.floor(rng() * 3800) + 100;
       const y = Math.floor(rng() * 3800) + 100;
-      const sprite = this.add.image(x, y, 'rock').setDisplaySize(48, 48).setDepth(y);
+      
+      const h1 = (id * 1111111) % 100 / 100;
+      const h2 = (id * 2222222) % 100 / 100;
+      
+      const scale = 0.7 + h1 * 0.6;
+      const cVal = 180 + Math.floor(h2 * 75);
+      const color = (cVal << 16) | (cVal << 8) | cVal;
+
+      const sprite = this.add.image(x, y, 'rock')
+        .setDisplaySize(48 * scale, 48 * scale)
+        .setTint(color)
+        .setDepth(y);
       this.rocks.set(id, { id, type: entityTypes.ROCK, x, y, sprite });
     }
-    for (let i = 0; i < 3; i++) {
+    
+    for (let i = 0; i < 5; i++) {
       const id = nextEntityId++;
       const x = Math.floor(rng() * 3800) + 100;
       const y = Math.floor(rng() * 3800) + 100;
       const sprite = this.add.image(x, y, 'radio').setDisplaySize(32, 32).setDepth(y);
       this.radios.set(id, { id, type: entityTypes.RADIO, x, y, sprite });
+    }
+    
+    // Pure visual bushes and pebbles that have no ID and can't be interacted with
+    for (let i = 0; i < 150; i++) {
+      const x = Math.floor(rng() * 3900) + 50;
+      const y = Math.floor(rng() * 3900) + 50;
+      const h1 = (i * 999999) % 100 / 100;
+      const scale = 0.3 + h1 * 0.3;
+      const color = 0x889988; // Darker tint for bush
+      this.add.image(x, y, 'tree')
+        .setDisplaySize(64 * scale, 128 * scale)
+        .setTint(color)
+        .setDepth(y)
+        .setAlpha(0.8);
     }
   }
 
@@ -210,10 +272,6 @@ export default class GameScene extends Phaser.Scene {
 
   onStateUpdate(snap) {
     if (this.isDead) return;
-
-    if (this.debugText) {
-      this.debugText.setText(`Tick: ${snap.tick} | Players: ${snap.players.length} | Local ID: ${snap.local_player_id}\n` + snap.players.map(p => `P${p.id} (${p.x}, ${p.y})`).join('\n'));
-    }
 
     if (this.isWinning) return;
 
@@ -433,8 +491,9 @@ export default class GameScene extends Phaser.Scene {
     else if (this.wasd.S.isDown) joy_y = 1;
 
     if (this.joystickData.x !== 0 || this.joystickData.y !== 0) {
-      joy_x = this.joystickData.x;
-      joy_y = this.joystickData.y;
+      // Extremely small deadzone in case of floating point inaccuracies, otherwise full speed
+      joy_x = Math.abs(this.joystickData.x) > 0.01 ? Math.sign(this.joystickData.x) : 0;
+      joy_y = Math.abs(this.joystickData.y) > 0.01 ? Math.sign(this.joystickData.y) : 0;
     }
 
     // Chop logic - finding the nearest entity
@@ -465,6 +524,33 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
+    // QoL: Update nearest item highlight indicator
+    if (pObj && this.itemHighlight) {
+      let minDist = 80;
+      let closestItem = null;
+      const checkGroup = (group) => {
+        for (const [id, item] of group) {
+          const dist = Phaser.Math.Distance.Between(pObj.sprite.x, pObj.sprite.y, item.x, item.y);
+          if (dist < minDist) {
+            minDist = dist;
+            closestItem = item;
+          }
+        }
+      };
+      checkGroup(this.trees);
+      checkGroup(this.rocks);
+      checkGroup(this.radios);
+
+      if (closestItem) {
+        this.itemHighlight.setPosition(closestItem.x, closestItem.y);
+        this.itemHighlight.setVisible(true);
+        // Add a gentle pulsing effect
+        this.itemHighlight.setScale(1 + Math.sin(time / 150) * 0.1);
+      } else {
+        this.itemHighlight.setVisible(false);
+      }
+    }
+
     if (this.craftRequested) {
       flags |= BLE.INPUT_FLAGS.CRAFT;
       this.craftRequested = false;
@@ -474,6 +560,9 @@ export default class GameScene extends Phaser.Scene {
     // joy_x / joy_y need to be integers for the codec. Codec uses i16 but expects values?
     // In HostSimulation: vx = input.joy_x * speed. Wait, does Codec scale them?
     // Let's just send [-1, 1].
+    if (joy_x !== 0 || joy_y !== 0) {
+      console.log('GameScene queuing input:', { joy_x, joy_y });
+    }
     multiplayerManager.queueInput({
       flags,
       joy_x,
