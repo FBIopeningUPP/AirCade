@@ -73,7 +73,8 @@ export default function App() {
   const [socket, setSocket] = useState(null);
   const [playerName, setPlayerName] = useState('');
   const [roomData, setRoomData] = useState({ roomCode: '', players: [], isHost: false, myId: '' });
-  const [foundRoom, setFoundRoom] = useState({ roomCode: '', hostName: '' });
+  const [foundRoom, setFoundRoom] = useState({ hostName: '', deviceId: null });
+  const [isConnecting, setIsConnecting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   
   const [fadeState, setFadeState] = useState('fade-in');
@@ -268,8 +269,11 @@ export default function App() {
   const handleJoinRoom = async () => {
     if (foundRoom.deviceId) {
       try {
+        setIsConnecting(true);
         await multiplayerManager.connect(foundRoom.deviceId);
+        setIsConnecting(false);
       } catch (e) {
+        setIsConnecting(false);
         setErrorMsg(e.message);
         changeGameState('menu');
       }
@@ -388,8 +392,9 @@ export default function App() {
               onMouseEnter={playBlip}
               onClick={() => { playSelect(); handleJoinRoom(); }}
               style={{ marginTop: '20px' }}
+              disabled={isConnecting}
             >
-              CONNECT VIA BLUETOOTH
+              {isConnecting ? 'CONNECTING...' : 'CONNECT VIA BLUETOOTH'}
             </button>
           </div>
         </div>

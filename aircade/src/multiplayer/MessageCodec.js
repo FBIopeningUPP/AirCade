@@ -51,13 +51,14 @@ export class MessageCodec {
     w.u8((snap.player_count << 6) | (snap.local_player_id & 0x3));
 
     for (const p of snap.players) {
-      const pos = packPos(p.x, p.y);
-      w.u8(pos >> 16); w.u8(pos >> 8); w.u8(pos);
-      w.i16(Math.round(p.vx * 10));
-      w.i16(Math.round(p.vy * 10));
+      w.u8(p.id);
+      const packed = packPos(p.x, p.y);
+      w.u8(packed >> 16); w.u8(packed >> 8); w.u8(packed);
+      w.i16(p.vx * 10);
+      w.i16(p.vy * 10);
       w.u8(p.health);
-      const inv = (p.inv.wood << 11) | (p.inv.stone << 6) | (p.inv.radio << 3);
-      w.u16(inv);
+      const invVal = ((p.inv.wood & 0x1f) << 11) | ((p.inv.stone & 0x1f) << 6) | ((p.inv.radio & 0x7) << 3);
+      w.u16(invVal);
     }
 
     w.u8(snap.darkness_alpha);
@@ -202,18 +203,25 @@ export class MessageCodec {
     const local_player_id = pc & 0x3;
     const players = [];
     for (let i = 0; i < player_count; i++) {
+      const id = r.u8();
       const pos = (r.u8() << 16) | (r.u8() << 8) | r.u8();
       const { x, y } = unpackPos(pos);
+      
+      const vx = r.i16() / 10;
+      const vy = r.i16() / 10;
+      const health = r.u8();
+      const invVal = r.u16();
+      
       players.push({
-        id: i,
+        id,
         x, y,
-        vx: r.i16() / 10,
-        vy: r.i16() / 10,
-        health: r.u8(),
+        vx,
+        vy,
+        health,
         inv: {
-          wood: (r.u16() >> 11) & 0x1f,
-          stone: (r.u16() >> 6) & 0x1f,
-          radio: (r.u16() >> 3) & 0x7,
+          wood: (invVal >> 11) & 0x1f,
+          stone: (invVal >> 6) & 0x1f,
+          radio: (invVal >> 3) & 0x7,
         },
       });
     }

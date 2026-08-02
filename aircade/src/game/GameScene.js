@@ -8,20 +8,21 @@ export default class GameScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.spritesheet('player', 'https://labs.phaser.io/assets/sprites/spaceman.png', { frameWidth: 16, frameHeight: 16 });
-    this.load.image('tree', 'https://labs.phaser.io/assets/sprites/pine.png');
-    this.load.image('rock', 'https://labs.phaser.io/assets/sprites/asteroid.png');
-    this.load.image('radio', 'https://labs.phaser.io/assets/sprites/platformer/powerup.png');
-    this.load.image('campfire', 'https://labs.phaser.io/assets/sprites/fire3.png');
-    this.load.spritesheet('water', 'https://labs.phaser.io/assets/sprites/water.png', { frameWidth: 32, frameHeight: 32 });
-    this.load.image('helicopter', 'https://labs.phaser.io/assets/sprites/enemy-bird.png');
+    this.load.spritesheet('player', 'player_sheet_aligned_fixed.png', { frameWidth: 256, frameHeight: 256 });
+    this.load.image('tree', 'tree.png');
+    this.load.image('rock', 'rock.png');
+    this.load.image('radio', 'radio_part.png');
+    this.load.image('campfire', 'campfire.png');
+    this.load.image('helicopter', 'helicopter.png');
     
-    this.load.audio('sfx_chop', 'https://labs.phaser.io/assets/audio/SoundEffects/squit.wav');
-    this.load.audio('sfx_wind', 'https://labs.phaser.io/assets/audio/SoundEffects/bodenst-magical_sweep.mp3');
-    this.load.audio('sfx_fire', 'https://labs.phaser.io/assets/audio/SoundEffects/magical_horror_audiosprite.mp3');
+    // Using default audio or silence since they failed to download
+    // this.load.audio('sfx_chop', 'squit.wav');
+    // this.load.audio('sfx_wind', 'magical_sweep.mp3');
+    // this.load.audio('sfx_fire', 'magical_horror.mp3');
   }
 
   create() {
+    window.__debugGameScene = this;
     this.scale.resize(window.innerWidth, window.innerHeight);
 
     this.health = 100;
@@ -38,17 +39,15 @@ export default class GameScene extends Phaser.Scene {
     this.radios = new Map();
     this.campfires = new Map();
 
+    // Set ocean background color on the camera to save VRAM
+    this.cameras.main.setBackgroundColor('#34495e');
+
+    // Draw the island without generating a massive texture to prevent WebGL crash on mobile
     const bgGraphics = this.add.graphics();
-    bgGraphics.fillStyle(0x34495e, 1);
-    bgGraphics.fillRect(-2000, -2000, 10000, 10000);
     bgGraphics.fillStyle(0x76b852, 1);
     bgGraphics.fillRoundedRect(0, 0, 4000, 4000, 200);
-    bgGraphics.generateTexture('island_bg', 10000, 10000);
-    bgGraphics.destroy();
-    
-    this.add.image(1000, 1000, 'island_bg').setOrigin(0, 0).setDepth(-10);
+    bgGraphics.setDepth(-10);
 
-    this.anims.create({ key: 'water_wave', frames: this.anims.generateFrameNumbers('water', { start: 0, end: 2 }), frameRate: 4, repeat: -1 });
 
     const graphics = this.add.graphics();
     graphics.fillStyle(0xcccccc, 1);
@@ -135,13 +134,11 @@ export default class GameScene extends Phaser.Scene {
     holeGraphics.generateTexture('lightHole', 300, 300);
     holeGraphics.destroy();
 
-    const bgGraphics2 = this.add.graphics();
-    bgGraphics2.fillStyle(0x000000, 1);
-    bgGraphics2.fillRect(0, 0, 8000, 8000);
-    bgGraphics2.generateTexture('blackBg', 8000, 8000);
-    bgGraphics2.destroy();
+    // blackBg texture removed to prevent WebGL crash on mobile
 
     this.darknessLayer = this.add.renderTexture(0, 0, this.scale.width, this.scale.height).setDepth(100).setAlpha(0).setScrollFactor(0);
+
+    this.debugText = this.add.text(10, 10, 'Waiting for state...', { fontSize: '16px', color: '#ff0', backgroundColor: '#000' }).setScrollFactor(0).setDepth(9999);
 
     const dummySound = { volume: 0, play: () => {}, destroy: () => {} };
     try {
@@ -212,6 +209,12 @@ export default class GameScene extends Phaser.Scene {
   }
 
   onStateUpdate(snap) {
+    if (this.isDead) return;
+
+    if (this.debugText) {
+      this.debugText.setText(`Tick: ${snap.tick} | Players: ${snap.players.length} | Local ID: ${snap.local_player_id}\n` + snap.players.map(p => `P${p.id} (${p.x}, ${p.y})`).join('\n'));
+    }
+
     if (this.isWinning) return;
 
     // Update darkness
@@ -389,7 +392,7 @@ export default class GameScene extends Phaser.Scene {
     if (this.isWinning) return;
 
     this.darknessLayer.clear();
-    this.darknessLayer.draw('blackBg', 0, 0);
+    this.darknessLayer.fill(0x000000);
 
     const scrollX = this.cameras.main.scrollX;
     const scrollY = this.cameras.main.scrollY;

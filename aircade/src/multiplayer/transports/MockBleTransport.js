@@ -131,6 +131,12 @@ export class MockBleTransport extends TransportInterface {
 
   async broadcast_state(buf) {
     if (!this.connected || this.role !== 'host') return;
+    try {
+      const msg = this.codec.decode(buf);
+      this.on_state_update?.(msg);
+    } catch (e) {
+      console.error('DECODE ERROR in MockBleTransport:', e);
+    }
     for (const peer of this.peers.values()) {
       if (!peer.isHost) this._sendToPeer(peer.id, buf);
     }
@@ -138,6 +144,10 @@ export class MockBleTransport extends TransportInterface {
 
   async broadcast_event(buf) {
     if (!this.connected || this.role !== 'host') return;
+    try {
+      const msg = this.codec.decode(buf);
+      this.on_event?.(msg);
+    } catch {}
     for (const peer of this.peers.values()) {
       if (!peer.isHost) this._sendToPeer(peer.id, buf);
     }

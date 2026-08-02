@@ -14,7 +14,13 @@ export class BinWriter {
 
 export class BinReader {
   constructor(buf) {
-    this.view = new DataView(buf);
+    if (buf instanceof ArrayBuffer) {
+      this.view = new DataView(buf);
+    } else if (buf && buf.buffer instanceof ArrayBuffer) {
+      this.view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    } else {
+      throw new Error('BinReader expects ArrayBuffer or ArrayBufferView');
+    }
     this.off = 0;
   }
   u8() { return this.view.getUint8(this.off++); }

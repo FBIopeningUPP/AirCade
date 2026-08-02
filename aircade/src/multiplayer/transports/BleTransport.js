@@ -86,7 +86,7 @@ export class BleTransport extends TransportInterface {
     }).then(handle => { disconnectListenerHandle = handle; this._listeners.set('centralDisconn', handle); });
 
     await this.ble.startAdvertising({
-      serviceUuids: [BLE.SERVICE_UUID],
+      services: [BLE.SERVICE_UUID],
       name: 'Aircade',
     });
     this.connected = true;
@@ -100,39 +100,25 @@ export class BleTransport extends TransportInterface {
     return new Promise((resolve, reject) => {
       this._scan_timeout = setTimeout(() => {
         this.ble.stopScan();
-        reject(new Error('scan timeout'));
-      }, 10000);
+        reject(new Error('scan timeout - no devices found within 15 seconds'));
+      }, 15000);
 
       let listenerHandle = null;
       this.ble.addListener('deviceScanned', (result) => {
         if (!result.device) return;
         
-        const name = result.device.name || '';
-        const hasName = name.toLowerCase().includes('aircade');
-        
-        let hasUuid = false;
-        if (result.device.serviceUuids) {
-          hasUuid = result.device.serviceUuids.some(u => 
-            u.toLowerCase() === BLE.SERVICE_UUID.toLowerCase() || 
-            u.toLowerCase() === '0xa1c0' || 
-            u.toLowerCase() === 'a1c0'
-          );
-        }
-
-        if (hasName || hasUuid) {
-          clearTimeout(this._scan_timeout);
-          this.ble.stopScan();
-          if (listenerHandle) listenerHandle.remove();
-          this.device_id = result.device.deviceId;
-          resolve({ device_id: result.device.deviceId, name: name || 'Aircade Host', rssi: result.device.rssi });
-        }
+        clearTimeout(this._scan_timeout);
+        this.ble.stopScan();
+        if (listenerHandle) listenerHandle.remove();
+        this.device_id = result.device.deviceId;
+        resolve({ device_id: result.device.deviceId, name: result.device.name || 'Aircade Host', rssi: result.device.rssi });
       }).then(handle => {
         listenerHandle = handle;
         this._listeners.set('scan', handle);
       });
 
-      // Scan for all devices, manually filter to avoid Android filter bugs
       this.ble.startScan({
+        services: [BLE.SERVICE_UUID],
         allowDuplicates: false,
       });
     });
@@ -140,17 +126,58 @@ export class BleTransport extends TransportInterface {
 
   async connect(device_id) {
     this.device_id = device_id;
-    await this.ble.connect({ deviceId: device_id });
-    await this.ble.discoverServices({ deviceId: device_id });
+    
+    // Stop scanning again to ensure hardware is free
+    await this.ble.stopScan().catch(() => {});
+    // Disconnect ghost connections
+    await this.ble.disconnect({ deviceId: device_id }).catch(() => {});
+    
+    // Give Android hardware a second to process the disconnect/stopScan
+    await new Promise(r => setTimeout(r, 1000));
+    
+    let connected = false;
+    for (let i = 0; i < 3; i++) {
+      try {
+        await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('Connection timeout')), 8000);
+          this.ble.connect({ deviceId: device_id, autoConnect: true }).then(() => {
+            clearTimeout(timer);
+            resolve();
+          }).catch(err => {
+            clearTimeout(timer);
+            reject(err);
+          });
+        });
+        connected = true;
+        break; // Success
+      } catch (e) {
+        console.warn(`[BleTransport] connect attempt ${i+1} failed:`, e);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+    
+    if (!connected) {
+      throw new Error('Connection timeout. Restart Bluetooth or move phones closer.');
+    }
+    
+    try {
+      await this.ble.discoverServices({ deviceId: device_id });
+    } catch (e) {
+      console.warn('[BleTransport] discoverServices error (might be ignored):', e);
+    }
+    
     const { services } = await this.ble.getServices({ deviceId: device_id });
+    this._actual_service_uuid = BLE.SERVICE_UUID;
+    
     for (const svc of services) {
       if (svc.uuid.toLowerCase() === BLE.SERVICE_UUID.toLowerCase()) {
+        this._actual_service_uuid = svc.uuid;
         for (const char of svc.characteristics) {
           if (char.uuid.toLowerCase() === BLE.CHAR_STATE_UUID.toLowerCase()) {
             this._state_char = char.uuid;
             await this.ble.startCharacteristicNotifications({
               deviceId: device_id,
-              service: BLE.SERVICE_UUID,
+              service: this._actual_service_uuid,
               characteristic: this._state_char,
             });
             const listener = this.ble.addListener('characteristicChanged', (val) => {
@@ -177,6 +204,9 @@ export class BleTransport extends TransportInterface {
     this.peer_id = device_id;
     const join = this.codec.encode_join_req('Player');
     await this._write(this._control_char, join);
+    
+    // Tell MultiplayerManager we are fully connected
+    this.on_peer_connected?.(this.peer_id);
   }
 
   async send_input(input) {
@@ -206,6 +236,10 @@ export class BleTransport extends TransportInterface {
 
   async broadcast_state(buf) {
     if (!this.connected || this.role !== 'host' || !this._state_char) return;
+    try {
+      const msg = this.codec.decode(buf);
+      this.on_state_update?.(msg);
+    } catch {}
     const value = Array.from(buf);
     await this.ble.setGattCharacteristicValue({
       service: BLE.SERVICE_UUID,
@@ -221,6 +255,10 @@ export class BleTransport extends TransportInterface {
 
   async broadcast_event(buf) {
     if (!this.connected || this.role !== 'host' || !this._state_char) return;
+    try {
+      const msg = this.codec.decode(buf);
+      this.on_event?.(msg);
+    } catch {}
     const value = Array.from(buf);
     await this.ble.setGattCharacteristicValue({
       service: BLE.SERVICE_UUID,
@@ -240,7 +278,7 @@ export class BleTransport extends TransportInterface {
     }
     await this.ble.writeCharacteristic({
       deviceId: this.device_id,
-      service: BLE.SERVICE_UUID,
+      service: this._actual_service_uuid || BLE.SERVICE_UUID,
       characteristic: char_uuid,
       value: Array.from(buf),
       type: 'withoutResponse',

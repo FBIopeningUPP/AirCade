@@ -73,6 +73,8 @@ class MultiplayerManager {
     this.isHost = true;
     this._emitConnectionChange('connecting');
     await this.transport.host({});
+    await this._startHostSimulation();
+    this._startTickLoop();
   }
 
   async scan() {
@@ -107,7 +109,7 @@ class MultiplayerManager {
   _onPeerConnected(peerId) {
     console.log('[MultiplayerManager] Peer connected:', peerId);
     if (this.isHost) {
-      this._startHostSimulation();
+      // Simulation already started in host()
       if (this.hostSimulation) {
         const _playerId = this.hostSimulation.addPlayer(peerId);
         this._sendJoinAccept(peerId, this.hostSimulation.getSnapshot());
@@ -188,7 +190,11 @@ class MultiplayerManager {
     const input = this.inputQueue.shift() || this._getDefaultInput();
     input.seq = this.localSeq++;
     input.tick = this.localTick;
-    this.transport.send_input(input);
+    if (this.isHost && this.hostSimulation) {
+      this.hostSimulation.queueInput(this.playerId, input);
+    } else {
+      this.transport.send_input(input);
+    }
   }
 
   _getDefaultInput() {
@@ -226,13 +232,10 @@ class MultiplayerManager {
   }
 
   _handleStateUpdate(msg) {
-    if (msg.type === 'SNAPSHOT') {
+    if (msg.type === 'SNAPSHOT' || msg.type === 'DELTA') {
       this.lastAckSeq = msg.last_ack_seq;
       this.lastAckTick = msg.tick;
-      this.onStateUpdate?.(msg);
-    } else if (msg.type === 'DELTA') {
-      this.lastAckSeq = msg.last_ack_seq;
-      this.lastAckTick = msg.tick;
+      msg.local_player_id = this.playerId; // Overwrite shared snapshot player ID with our own local ID
       this.onStateUpdate?.(msg);
     }
   }
@@ -240,11 +243,11 @@ class MultiplayerManager {
   _handleEvent(msg) {
     switch (msg.type) {
       case 'JOIN_ACCEPT':
+        this.connected = true;
         this.playerId = msg.player_id;
         this.worldSeed = msg.world_seed;
-        this.connected = true;
         this.reconnectAttempts = 0;
-        this._emitConnectionChange('connected');
+        this._emitConnectionChange('connected'); // Transition to playing state now that we have worldSeed!
         this._startTickLoop();
         this._startPingLoop();
         this.onStateUpdate?.(msg.snapshot);
@@ -278,6 +281,8 @@ class MultiplayerManager {
     }
     this.hostSimulation = new HostSimulation(this.transport, this.codec, this.worldSeed);
     this.transport.setHostSimulation(this.hostSimulation);
+    this.playerId = 1; // Host gets ID 1
+    this.hostSimulation.addPlayer(this.playerId);
     this.hostSimulation.start();
   }
 

@@ -41,7 +41,6 @@ export class HostSimulation {
     if (this.running) return;
     this.running = true;
     this._generateWorld();
-    this.addPlayer(this.transport.peer_id);
     this.tickInterval = setInterval(() => this._tick(), this.tickMs);
     console.log('[HostSimulation] Started');
   }
@@ -236,36 +235,50 @@ export class HostSimulation {
   }
 
   _updateDarkness() {
-    if (this.darknessAlpha < 0.85) {
-      this.darknessAlpha += 0.0001;
-    }
+    // 3 minute cycle (180s = 3600 ticks at 20 ticks/sec).
+    // Start at -PI/2 (peak day)
+    const cycle = Math.sin((this.currentTick / 3600) * Math.PI * 2 - Math.PI / 2);
+    // Map -1..1 to 0..0.85
+    this.darknessAlpha = Math.max(0, cycle) * 0.85;
+
     const now = Date.now();
     if (now - this.lastDarknessDamage >= this.darknessDamageInterval) {
       this.lastDarknessDamage = now;
-      if (this.darknessAlpha > 0.5) {
-        for (const [playerId, pos] of this.playerPositions) {
-          let isWarm = false;
-          for (const campfire of this.campfires.values()) {
-            if (campfire.active) {
-              const dist = Math.hypot(pos.x - campfire.x, pos.y - campfire.y);
-              if (dist < this.campfireWarmRadius) {
-                isWarm = true;
-                break;
-              }
+      for (const [playerId, pos] of this.playerPositions) {
+        let isWarm = false;
+        for (const campfire of this.campfires.values()) {
+          if (campfire.active) {
+            const dist = Math.hypot(pos.x - campfire.x, pos.y - campfire.y);
+            if (dist < this.campfireWarmRadius) {
+              isWarm = true;
+              break;
             }
           }
-          if (!isWarm) {
-            const health = (this.playerHealth.get(playerId) || 100) - 5;
-            this.playerHealth.set(playerId, health);
-            this._broadcastEvent({
-              evt_type: BLE.EVENT_TYPES.DAMAGE,
-              player_id: playerId,
-              new_health: Math.max(0, health),
-            });
-            if (health <= 0) {
-              this._handlePlayerDeath(playerId);
-            }
+        }
+        
+        const health = this.playerHealth.get(playerId) || 100;
+        
+        if (!isWarm && this.darknessAlpha > 0.5) {
+          // Freezing
+          const newHealth = health - 5;
+          this.playerHealth.set(playerId, newHealth);
+          this._broadcastEvent({
+            evt_type: BLE.EVENT_TYPES.DAMAGE,
+            player_id: playerId,
+            new_health: Math.max(0, newHealth),
+          });
+          if (newHealth <= 0) {
+            this._handlePlayerDeath(playerId);
           }
+        } else if (isWarm && health < 100) {
+          // Healing by the fire
+          const newHealth = Math.min(100, health + 2);
+          this.playerHealth.set(playerId, newHealth);
+          this._broadcastEvent({
+            evt_type: BLE.EVENT_TYPES.DAMAGE,
+            player_id: playerId,
+            new_health: newHealth,
+          });
         }
       }
     }
@@ -370,6 +383,7 @@ export class HostSimulation {
       const health = this.playerHealth.get(playerId) || 100;
       const inv = this.playerInventories.get(playerId) || { wood: 0, stone: 0, radio: 0 };
       players.push({
+        id: playerId,
         x: pos.x,
         y: pos.y,
         vx: vel.vx,
