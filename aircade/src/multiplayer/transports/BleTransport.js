@@ -143,8 +143,8 @@ export class BleTransport extends TransportInterface {
     for (let i = 0; i < 3; i++) {
       try {
         await new Promise((resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error('Connection timeout')), 8000);
-          this.ble.connect({ deviceId: device_id, autoConnect: true }).then(() => {
+          const timer = setTimeout(() => reject(new Error('Connection timeout')), 10000);
+          this.ble.connect({ deviceId: device_id, timeout: 10000 }).then(() => {
             clearTimeout(timer);
             resolve();
           }).catch(err => {
@@ -156,7 +156,7 @@ export class BleTransport extends TransportInterface {
         break; // Success
       } catch (e) {
         console.warn(`[BleTransport] connect attempt ${i+1} failed:`, e);
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 1500));
       }
     }
     
