@@ -1,49 +1,35 @@
-# AirCade ✈️🕹️
+# ✈️🕹️ AirCade
 
-**AirCade** is a local multiplayer 8-bit survival game for Android! We built this as a hackathon project to create a game you can play with your friends anywhere, without needing Wi-Fi or cellular data.
+**AirCade** is a simple, offline 8-bit survival game for Android. We built this for our hackathon to show how **AI agents** can help quickly build complex local multiplayer games!
 
 ---
 
-## 👨‍💻 Built By
-- **Milind**
-- **Dhruv**
-- **Vinayak**
+## 👨‍💻 The Hackathon Team
+Built with blood, sweat, and **AI**:
+- **Milind** (Antigravity AI)
+- **Dhruv** (OpenCode / Nemtron / NVIDIA AI)
+- **Vinayak** (Antigravity AI)
 
 ---
 
 ## 🎮 How to Play
+You crash land on a freezing island. Work together to survive!
+- **Chop & Mine:** Gather Wood and Stone.
+- **Stay Warm:** Build Campfires to survive the freezing cold.
+- **Escape:** Find 3 Radio Parts to call the rescue helicopter and win!
 
-You and up to 3 friends crash land on a freezing island. Work together to survive:
-- **Gather:** Chop trees for wood and mine rocks for stone.
-- **Survive:** Craft campfires to stay warm. If you stay in the cold too long, you will freeze!
-- **Escape:** Find the 3 missing radio parts scattered around the island to call the rescue helicopter and win!
-
-The game uses Bluetooth to connect players completely offline. One person hosts the game, and the others join.
+AirCade uses Bluetooth to connect up to 4 players without any Wi-Fi or internet. 
 
 ---
 
-## 📱 How to Install (Android)
+## 🚀 How to Run
 
-1. Build the web code:
+1. **Build Web Assets:**
    ```bash
    npm run build
-   ```
-2. Sync with Android:
-   ```bash
    npx cap sync android
    ```
-3. Open Android Studio and install the app to your phone:
-   ```bash
-   npx cap open android
-   ```
+2. **Install to Phone:**
+   Open `npx cap open android` and click Play to install the APK to your Android device.
 
----
-
-## 💻 Test on your Computer
-
-If you just want to test the game in your web browser without building the Android app:
-```bash
-npm install
-npm run dev
-```
-Open `http://localhost:5173` in multiple browser tabs to simulate a multiplayer session!
+*To test in your browser instead, just run `npm run dev` and open `localhost:5173` in a few tabs!*
